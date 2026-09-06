@@ -13,7 +13,7 @@ SUBJECTS = [
 ]
 
 SUMMARY_LINKS = {
-    "النحو": ""النحو": "https://drive.google.com/file/d/11vHek92zyJfhSXD9fIUdJadSCgyRwZ6l/view?usp=drivesdk",",
+    "النحو": "https://drive.google.com/file/d/11vHek92zyJfhSXD9fIUdJadSCgyRwZ6l/view?usp=drivesdk",
     "الصرف": "",
     "البلاغة": "",
     "الأدب الإسلامي": "",
