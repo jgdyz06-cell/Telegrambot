@@ -11,6 +11,7 @@ import db
 import quiz
 import quiz_flow
 import reports
+import seed
 from config import BOT_TOKEN, logger
 from ui import (
     SUB_TEXT, is_admin, is_subscribed, main_menu, send_summary, show,
@@ -46,6 +47,13 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"هذا الأمر للأدمن فقط.\nآيديك: {uid}\n(ضيفه في ADMIN_IDS)"
         )
     await update.message.reply_text("⚙️ لوحة الأدمن:", reply_markup=admin.panel_markup())
+
+
+async def content_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    text = "\n".join(seed.REPORT) or "ما في تقرير."
+    await update.message.reply_text("📂 المحتوى المحمّل من الملفات:\n\n" + text[:3500])
 
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -119,11 +127,25 @@ def main():
     if not BOT_TOKEN:
         raise SystemExit("❌ حط التوكن في متغير البيئة BOT_TOKEN (شوف README.md)")
     db.init()
-    app = Application.builder().token(BOT_TOKEN).build()
+    seed.sync()
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .write_timeout(30)
+        .pool_timeout(30)
+        .get_updates_connect_timeout(30)
+        .get_updates_read_timeout(30)
+        .get_updates_write_timeout(30)
+        .get_updates_pool_timeout(30)
+        .build()
+    )
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("admin", admin_cmd))
     app.add_handler(CommandHandler("cancel", cancel))
+    app.add_handler(CommandHandler("content", content_cmd))
     app.add_handler(CallbackQueryHandler(on_button))
     app.add_handler(
         MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.Document.ALL, on_message)
