@@ -16,7 +16,7 @@ from config import ADMIN_IDS, logger
 INTERVAL = 300  # كل 5 دقايق، وبس إذا تغيّر شي
 FILENAME = "bot-backup.db"
 CAPTION = "🗄 نسخة القاعدة الاحتياطية. لا تحذف هذي الرسالة"
-TABLES = ("subjects", "summaries", "questions", "results")
+TABLES = ("subjects", "summaries", "questions", "results", "users")
 
 LAST_RESTORE = "لسا ما صار"
 _state = {"sig": None, "msg": None}
@@ -104,61 +104,4 @@ async def restore(bot):
     chat = backup_chat()
     if chat is None:
         return "no_chat"
-    info = await bot.get_chat(chat)
-    pm = getattr(info, "pinned_message", None)
-    doc = getattr(pm, "document", None) if pm else None
-    if not doc:
-        return "no_backup"
-    tg_file = await bot.get_file(doc.file_id)
-    fd, tmp = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    try:
-        await tg_file.download_to_drive(tmp)
-        c = sqlite3.connect(tmp)
-        try:
-            c.execute("SELECT COUNT(*) FROM subjects").fetchone()
-        finally:
-            c.close()
-        shutil.copyfile(tmp, dbcore.db_path())
-    except Exception:
-        logger.exception("فشلت استعادة النسخة")
-        return "failed"
-    finally:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-    _state["msg"] = pm.message_id
-    return "restored"
-
-
-async def loop(bot):
-    await asyncio.sleep(30)
-    while True:
-        try:
-            await send_backup(bot)
-        except Exception:
-            logger.exception("فشل الحفظ الدوري")
-        await asyncio.sleep(INTERVAL)
-
-
-async def startup(app):
-    global LAST_RESTORE
-    try:
-        LAST_RESTORE = await restore(app.bot)
-    except Exception:
-        logger.exception("خطأ بالاستعادة")
-        LAST_RESTORE = "failed"
-    logger.info("استعادة النسخة: %s", LAST_RESTORE)
-    db.init()
-    seed.sync()
-    _state["sig"] = signature() if LAST_RESTORE == "restored" else None
-    app.bot_data["backup_task"] = asyncio.create_task(loop(app.bot))
-
-
-async def shutdown(app):
-    task = app.bot_data.get("backup_task")
-    if task:
-        task.cancel()
-    try:
-        await asyncio.wait_for(send_backup(app.bot), timeout=8)
-    except Exception:
-        logger.warning("نسخة الإغلاق ما تمت", exc_info=True)
+    info = a
