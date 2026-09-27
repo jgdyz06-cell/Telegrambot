@@ -4,8 +4,22 @@ import sqlite3
 from pathlib import Path
 
 
+def db_path():
+    p = os.environ.get("DB_PATH")
+    if p:
+        return p
+    vol = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH")
+    if vol:
+        return str(Path(vol) / "bot.db")
+    return str(Path(__file__).with_name("bot.db"))
+
+
 def connect():
-    path = os.environ.get("DB_PATH") or str(Path(__file__).with_name("bot.db"))
+    path = db_path()
+    try:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
     c = sqlite3.connect(path)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA foreign_keys = ON")
