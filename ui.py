@@ -31,6 +31,7 @@ def main_menu(uid):
         [Btn("📄 الملخصات", callback_data="sm")],
         [Btn("📝 الاختبارات", callback_data="qm")],
         [Btn("📊 نتائجي", callback_data="me")],
+        [Btn("📅 الجدول الأسبوعي", callback_data="sc")],
         [Btn("📑 طلب تقرير", callback_data="rp")],
         [Btn("📞 تواصل معنا", callback_data="ct")],
     ]
@@ -40,10 +41,11 @@ def main_menu(uid):
 
 
 def subjects_markup(prefix, count_key=None, back="m"):
-    rows = []
+    buttons = []
     for s in db.subjects_with_counts():
         label = f"{s['name']} ({s[count_key]})" if count_key else s["name"]
-        rows.append([Btn(label, callback_data=f"{prefix}:{s['id']}")])
+        buttons.append(Btn(label, callback_data=f"{prefix}:{s['id']}"))
+    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
     rows.append([Btn("🔙 رجوع", callback_data=back)])
     return Markup(rows)
 
