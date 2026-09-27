@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS results (
     subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     score INTEGER NOT NULL, total INTEGER NOT NULL,
     ts DATETIME DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY, name TEXT NOT NULL, section TEXT);
 """
 
 
@@ -74,29 +76,4 @@ def get_subject(sid):
 
 def add_subject(name):
     try:
-        return sql_run("INSERT INTO subjects(name) VALUES (?)", (name,))
-    except sqlite3.IntegrityError:
-        return None
-
-
-def delete_subject(sid):
-    sql_run("DELETE FROM subjects WHERE id = ?", (sid,))
-
-
-def summaries(sid):
-    return sql_all("SELECT * FROM summaries WHERE subject_id = ? ORDER BY id", (sid,))
-
-
-def get_summary(sum_id):
-    return sql_one("SELECT * FROM summaries WHERE id = ?", (sum_id,))
-
-
-def add_summary(sid, title, url=None, file_id=None):
-    return sql_run(
-        "INSERT INTO summaries(subject_id, title, url, file_id) VALUES (?,?,?,?)",
-        (sid, title, url, file_id),
-    )
-
-
-def delete_summary(sum_id):
-    sql_run("DELETE FROM summaries WHERE id = ?", (sum_id,))
+        return s
