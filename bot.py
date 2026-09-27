@@ -7,6 +7,7 @@ from telegram.ext import (
 
 import admin
 import admin_msg
+import backup
 import db
 import quiz
 import quiz_flow
@@ -53,7 +54,24 @@ async def content_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
     text = "\n".join(seed.REPORT) or "ما في تقرير."
-    await update.message.reply_text("📂 المحتوى المحمّل من الملفات:\n\n" + text[:3500])
+    tail = f"\n\n🗄 القاعدة: {backup.counts()}\n♻️ آخر استعادة: {backup.LAST_RESTORE}"
+    await update.message.reply_text("📂 المحتوى المحمّل من الملفات:\n\n" + text[:3200] + tail)
+
+
+async def backup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    try:
+        st = await backup.send_backup(context.bot, force=True)
+    except Exception:
+        logger.exception("backup")
+        st = "error"
+    names = {
+        "ok": "✅ انحفظت النسخة (مثبّتة بأعلى هذي المحادثة)",
+        "no_chat": "⚠️ ما في أدمن مسجّل بـ ADMIN_IDS",
+        "error": "❌ فشل الحفظ، شوف Deploy Logs",
+    }
+    await update.message.reply_text(f"{names.get(st, st)}\n🗄 {backup.counts()}")
 
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -126,11 +144,11 @@ async def on_error(update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     if not BOT_TOKEN:
         raise SystemExit("❌ حط التوكن في متغير البيئة BOT_TOKEN (شوف README.md)")
-    db.init()
-    seed.sync()
     app = (
         Application.builder()
         .token(BOT_TOKEN)
+        .post_init(backup.startup)
+        .post_stop(backup.shutdown)
         .connect_timeout(30)
         .read_timeout(30)
         .write_timeout(30)
@@ -146,6 +164,7 @@ def main():
     app.add_handler(CommandHandler("admin", admin_cmd))
     app.add_handler(CommandHandler("cancel", cancel))
     app.add_handler(CommandHandler("content", content_cmd))
+    app.add_handler(CommandHandler("backup", backup_cmd))
     app.add_handler(CallbackQueryHandler(on_button))
     app.add_handler(
         MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.Document.ALL, on_message)
