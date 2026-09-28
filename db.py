@@ -76,4 +76,54 @@ def get_subject(sid):
 
 def add_subject(name):
     try:
-        return s
+        return sql_run("INSERT INTO subjects(name) VALUES (?)", (name,))
+    except sqlite3.IntegrityError:
+        return None
+
+
+def delete_subject(sid):
+    sql_run("DELETE FROM subjects WHERE id = ?", (sid,))
+
+
+def summaries(sid):
+    return sql_all("SELECT * FROM summaries WHERE subject_id = ? ORDER BY id", (sid,))
+
+
+def get_summary(sum_id):
+    return sql_one("SELECT * FROM summaries WHERE id = ?", (sum_id,))
+
+
+def add_summary(sid, title, url=None, file_id=None):
+    return sql_run(
+        "INSERT INTO summaries(subject_id, title, url, file_id) VALUES (?,?,?,?)",
+        (sid, title, url, file_id),
+    )
+
+
+def delete_summary(sum_id):
+    sql_run("DELETE FROM summaries WHERE id = ?", (sum_id,))
+
+
+def upsert_user(uid, name):
+    sql_run(
+        "INSERT INTO users(user_id, name) VALUES (?, ?)"
+        " ON CONFLICT(user_id) DO UPDATE SET name = excluded.name",
+        (uid, name),
+    )
+
+
+def set_section(uid, section):
+    sql_run(
+        "INSERT INTO users(user_id, name, section) VALUES (?, ?, ?)"
+        " ON CONFLICT(user_id) DO UPDATE SET section = excluded.section",
+        (uid, str(uid), section),
+    )
+
+
+def get_section(uid):
+    r = sql_one("SELECT section FROM users WHERE user_id = ?", (uid,))
+    return r["section"] if r else None
+
+
+def users_with_section():
+    return sql_all("SELECT user_id, section FROM users WHERE section IS NOT NULL")
