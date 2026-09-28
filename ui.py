@@ -90,6 +90,15 @@ def main_menu(uid):
             ),
         ],
 
+        # تحدي الذكاء الاصطناعي
+        [
+            Btn(
+                "🧠 تحدي قواعد اللغة العربية",
+                callback_data="aichallenge",
+                style="success",
+            )
+        ],
+
         # واجهة قطوف الأكلم
         [
             Btn(
