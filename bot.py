@@ -51,8 +51,10 @@ from ai import ask_ai
 
 try:
     from google import genai
+    from google.genai import types
 except Exception:
     genai = None
+    types = None
 
 
 GEMINI_API_KEY = os.getenv(
@@ -74,9 +76,21 @@ if GEMINI_API_KEY and genai is not None:
 
     try:
 
-        voice_client = genai.Client(
-            api_key=GEMINI_API_KEY,
-        )
+        if types is not None:
+
+            voice_client = genai.Client(
+                api_key=GEMINI_API_KEY,
+                http_options=types.HttpOptions(
+                    api_version="v1",
+                    timeout=60000,
+                ),
+            )
+
+        else:
+
+            voice_client = genai.Client(
+                api_key=GEMINI_API_KEY,
+            )
 
         logger.info(
             "Gemini Voice client initialized: %s",
@@ -226,12 +240,24 @@ def _transcribe_voice_file(file_path):
             "تعذر إنشاء اتصال Gemini للصوت."
         )
 
+    if types is None:
+
+        raise RuntimeError(
+            "تعذر تحميل إعدادات google-genai."
+        )
+
     logger.info(
         "Uploading voice file to Gemini..."
     )
 
+    # Telegram Voice = OGG/Opus
+    # نحدد MIME type يدوياً حتى لا تحاول المكتبة
+    # اكتشافه من اسم الملف المؤقت.
     audio_file = voice_client.files.upload(
-        file=file_path
+        file=file_path,
+        config=types.UploadFileConfig(
+            mime_type="audio/ogg",
+        ),
     )
 
     logger.info(
@@ -240,13 +266,15 @@ def _transcribe_voice_file(file_path):
 
     interaction = voice_client.interactions.create(
         model=VOICE_MODEL,
+
         input=[
             {
                 "type": "audio",
                 "uri": audio_file.uri,
-                "mime_type": audio_file.mime_type,
+                "mime_type": "audio/ogg",
             }
         ],
+
         generation_config={
             "transcription_config": {
                 "mode": "smart",
@@ -792,10 +820,7 @@ async def callback_router(
         q.data or ""
     ).strip()
 
-    # --------------------------------------------------------
     # الاشتراك
-    # --------------------------------------------------------
-
     if data == "chk":
 
         return await verify_subscription(
@@ -803,10 +828,7 @@ async def callback_router(
             context,
         )
 
-    # --------------------------------------------------------
     # AI
-    # --------------------------------------------------------
-
     if data.startswith("ai:"):
 
         mode = data.split(
@@ -820,20 +842,14 @@ async def callback_router(
             mode,
         )
 
-    # --------------------------------------------------------
-    # باقي الأزرار تحتاج اشتراك
-    # --------------------------------------------------------
-
+    # التحقق من الاشتراك
     if not await check_access(
         update,
         context,
     ):
         return
 
-    # --------------------------------------------------------
     # الرئيسية
-    # --------------------------------------------------------
-
     if data == "m":
 
         return await show_main_menu(
@@ -992,7 +1008,7 @@ async def callback_router(
 
         await safe_answer(q)
 
-        return await quiz.retry_wrong(
+        return await quiz_flow.retry_wrong(
             q,
             context,
         )
@@ -1267,10 +1283,7 @@ def main():
         .build()
     )
 
-    # --------------------------------------------------------
     # Commands
-    # --------------------------------------------------------
-
     app.add_handler(
         CommandHandler(
             "start",
@@ -1285,20 +1298,14 @@ def main():
         )
     )
 
-    # --------------------------------------------------------
-    # Callback buttons
-    # --------------------------------------------------------
-
+    # Buttons
     app.add_handler(
         CallbackQueryHandler(
             callback_router
         )
     )
 
-    # --------------------------------------------------------
     # Voice
-    # --------------------------------------------------------
-
     app.add_handler(
         MessageHandler(
             filters.VOICE,
@@ -1306,10 +1313,7 @@ def main():
         )
     )
 
-    # --------------------------------------------------------
     # Documents
-    # --------------------------------------------------------
-
     app.add_handler(
         MessageHandler(
             filters.Document.ALL,
@@ -1317,10 +1321,7 @@ def main():
         )
     )
 
-    # --------------------------------------------------------
     # Text
-    # --------------------------------------------------------
-
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -1328,18 +1329,12 @@ def main():
         )
     )
 
-    # --------------------------------------------------------
     # Errors
-    # --------------------------------------------------------
-
     app.add_error_handler(
         error_handler
     )
 
-    # --------------------------------------------------------
-    # تذكير الجدول اليومي
-    # --------------------------------------------------------
-
+    # التذكير اليومي
     try:
 
         app.job_queue.run_daily(
