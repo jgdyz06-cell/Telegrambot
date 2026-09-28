@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
-
+"""المعالج الرئيسي للبوت."""
 from telegram import Update
 from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
+    Application, CallbackQueryHandler, CommandHandler,
+    ContextTypes, MessageHandler, filters,
 )
 
 import admin
@@ -21,26 +17,11 @@ import seed
 import timetable
 
 from config import BOT_TOKEN, logger
-
 from ui import (
-    SUB_TEXT,
-    ai_markup,
-    is_admin,
-    is_subscribed,
-    main_menu,
-    send_summary,
-    show,
-    sub_markup,
-    subjects_markup,
-    summaries_list,
+    SUB_TEXT, ai_markup, is_admin, is_subscribed, main_menu,
+    send_summary, show, sub_markup, subjects_markup,
 )
-
 from ai import ask_ai
-
-
-# =========================================================
-# أوضاع الذكاء الاصطناعي
-# =========================================================
 
 AI_MODES = {
     "grammar": "📌 الإعراب المفصل",
@@ -53,112 +34,64 @@ AI_MODES = {
 }
 
 
-# =========================================================
-# /start
-# =========================================================
-
-async def start(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("quiz", None)
     context.user_data.pop("await", None)
     context.user_data.pop("ai_text", None)
+    context.user_data.pop("retry", None)
 
     db.upsert_user(
         update.effective_user.id,
-        update.effective_user.full_name
+        update.effective_user.full_name,
     )
 
-    if not await is_subscribed(
-        context,
-        update.effective_user.id
-    ):
+    if not await is_subscribed(context, update.effective_user.id):
         return await update.message.reply_text(
             SUB_TEXT,
-            reply_markup=sub_markup()
+            reply_markup=sub_markup(),
         )
 
     await update.message.reply_text(
         "أهلاً بيك 👋\nاختر من القائمة:",
-        reply_markup=main_menu(
-            update.effective_user.id
-        )
+        reply_markup=main_menu(update.effective_user.id),
     )
 
 
-# =========================================================
-# /myid
-# =========================================================
-
-async def myid(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"آيديك: {update.effective_user.id}"
     )
 
 
-# =========================================================
-# /cancel
-# =========================================================
-
-async def cancel(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("await", None)
     context.user_data.pop("ai_text", None)
 
     await update.message.reply_text(
         "تم الإلغاء ✅",
-        reply_markup=main_menu(
-            update.effective_user.id
-        )
+        reply_markup=main_menu(update.effective_user.id),
     )
 
 
-# =========================================================
-# /admin
-# =========================================================
-
-async def admin_cmd(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
 
     if not is_admin(uid):
         return await update.message.reply_text(
-            f"هذا الأمر للأدمن فقط.\n"
-            f"آيديك: {uid}\n"
-            f"(ضيفه في ADMIN_IDS)"
+            f"هذا الأمر للأدمن فقط.\nآيديك: {uid}\n(ضيفه في ADMIN_IDS)"
         )
 
     await update.message.reply_text(
         "⚙️ لوحة الأدمن:",
-        reply_markup=admin.panel_markup()
+        reply_markup=admin.panel_markup(),
     )
 
 
-# =========================================================
-# /content
-# =========================================================
-
-async def content_cmd(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-    if not is_admin(
-        update.effective_user.id
-    ):
+async def content_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
         return
 
-    text = (
-        "\n".join(seed.REPORT)
-        or "ما في تقرير."
-    )
+    text = "\n".join(seed.REPORT) or "ما في تقرير."
 
     tail = (
         f"\n\n🗄 القاعدة: {backup.counts()}"
@@ -172,89 +105,45 @@ async def content_cmd(
     )
 
 
-# =========================================================
-# /backup
-# =========================================================
-
-async def backup_cmd(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-    if not is_admin(
-        update.effective_user.id
-    ):
+async def backup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
         return
 
     try:
         st = await backup.send_backup(
             context.bot,
-            force=True
+            force=True,
         )
-
     except Exception:
         logger.exception("backup")
         st = "error"
 
     names = {
-        "ok":
-            "✅ انحفظت النسخة "
-            "(مثبّتة بأعلى هذي المحادثة)",
-
-        "no_chat":
-            "⚠️ ما في أدمن مسجّل بـ ADMIN_IDS",
-
-        "error":
-            "❌ فشل الحفظ، شوف Deploy Logs",
+        "ok": "✅ انحفظت النسخة (مثبّتة بأعلى هذي المحادثة)",
+        "no_chat": "⚠️ ما في أدمن مسجّل بـ ADMIN_IDS",
+        "error": "❌ فشل الحفظ، شوف Deploy Logs",
     }
 
     await update.message.reply_text(
-        f"{names.get(st, st)}\n"
-        f"🗄 {backup.counts()}"
+        f"{names.get(st, st)}\n🗄 {backup.counts()}"
     )
 
 
-# =========================================================
-# استقبال الرسائل
-# =========================================================
-
-async def on_message(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     aw = context.user_data.get("await")
 
-    # -----------------------------------------------------
-    # طلب التقرير
-    # -----------------------------------------------------
-
-    if (
-        aw
-        and aw.get("type") == "report"
-    ):
+    if aw and aw.get("type") == "report":
         return await reports.handle_report_request(
             update,
-            context
+            context,
         )
 
-    # -----------------------------------------------------
-    # رسائل الأدمن
-    # -----------------------------------------------------
-
-    if (
-        aw
-        and is_admin(
-            update.effective_user.id
-        )
-    ):
+    if aw and is_admin(update.effective_user.id):
         return await admin_msg.handle_admin_message(
             update,
             context,
-            aw
+            aw,
         )
-
-    # -----------------------------------------------------
-    # النصوص
-    # -----------------------------------------------------
 
     if update.message and update.message.text:
         text = update.message.text.strip()
@@ -262,20 +151,15 @@ async def on_message(
         if not text:
             return
 
-        # نخزن النص حتى تستخدمه أزرار الذكاء الاصطناعي
         context.user_data["ai_text"] = text
 
         await update.message.reply_text(
             "🤖 شنو تريد أسوي للنص؟\n\n"
             "اختر نوع التحليل:",
-            reply_markup=ai_markup()
+            reply_markup=ai_markup(),
         )
 
         return
-
-    # -----------------------------------------------------
-    # الملفات
-    # -----------------------------------------------------
 
     if update.message:
         await update.message.reply_text(
@@ -285,15 +169,7 @@ async def on_message(
         )
 
 
-# =========================================================
-# معالجة الذكاء الاصطناعي
-# =========================================================
-
-async def handle_ai(
-    q,
-    context,
-    mode
-):
+async def handle_ai(q, context, mode):
     text = context.user_data.get("ai_text")
 
     if not text:
@@ -304,12 +180,10 @@ async def handle_ai(
 
     title = AI_MODES.get(
         mode,
-        "🤖 تحليل الذكاء الاصطناعي"
+        "🤖 تحليل الذكاء الاصطناعي",
     )
 
-    await q.answer()
-
-    status_message = await q.message.reply_text(
+    status = await q.message.reply_text(
         f"⏳ جاري {title}...\n"
         "انتظر قليلاً."
     )
@@ -317,19 +191,20 @@ async def handle_ai(
     try:
         result = await ask_ai(
             mode,
-            text
+            text,
         )
 
-        if not result:
-            result = "❌ ما حصلت نتيجة من الذكاء الاصطناعي."
+        result = result or (
+            "❌ ما حصلت نتيجة من الذكاء الاصطناعي."
+        )
 
-        # Telegram يسمح تقريباً بـ 4096 حرف
         if len(result) <= 4000:
-            await status_message.edit_text(
+            await status.edit_text(
                 f"{title}\n\n{result}"
             )
+
         else:
-            await status_message.edit_text(
+            await status.edit_text(
                 f"{title}\n\n{result[:4000]}"
             )
 
@@ -342,25 +217,47 @@ async def handle_ai(
                 await q.message.reply_text(chunk)
 
     except Exception as e:
-        logger.exception(
-            "AI analysis error"
-        )
+        logger.exception("AI analysis error")
 
-        await status_message.edit_text(
+        await status.edit_text(
             "❌ صار خطأ أثناء تحليل النص.\n\n"
-            f"نوع الخطأ: {type(e).__name__}\n\n"
+            f"نوع الخطأ: {type(e).__name__}\n"
             "راجع Railway Logs لمعرفة السبب."
         )
 
 
-# =========================================================
-# أزرار الذكاء الاصطناعي
-# =========================================================
+async def ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    data = q.data or ""
 
-async def ai_callback(
+    mode = (
+        data.split(":", 1)[1]
+        if ":" in data
+        else ""
+    )
+
+    if mode not in AI_MODES:
+        return await q.answer(
+            "❌ نوع التحليل غير معروف.",
+            show_alert=True,
+        )
+
+    await handle_ai(
+        q,
+        context,
+        mode,
+    )
+
+
+async def callback_router(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE
+    context: ContextTypes.DEFAULT_TYPE,
 ):
+    """
+    معالج واحد لكل أزرار البوت.
+    هذا يمنع تعارض CallbackQueryHandler.
+    """
+
     q = update.callback_query
 
     if not q:
@@ -368,45 +265,284 @@ async def ai_callback(
 
     data = q.data or ""
 
-    if not data.startswith("ai:"):
-        return
+    # نجاوب على ضغط الزر مرة واحدة فقط.
+    await q.answer()
 
-    mode = data.split(":", 1)[1]
+    # =========================
+    # الذكاء الاصطناعي
+    # =========================
 
-    if mode not in AI_MODES:
-        await q.answer(
-            "❌ نوع التحليل غير معروف.",
-            show_alert=True
+    if data.startswith("ai:"):
+        mode = data.split(":", 1)[1]
+
+        if mode not in AI_MODES:
+            return await q.message.reply_text(
+                "❌ نوع التحليل غير معروف."
+            )
+
+        return await handle_ai(
+            q,
+            context,
+            mode,
         )
-        return
 
-    await handle_ai(
-        q,
-        context,
-        mode
+    # =========================
+    # القائمة الرئيسية
+    # =========================
+
+    if data == "m":
+        return await show(
+            q,
+            "أهلاً بيك 👋\nاختر من القائمة:",
+            main_menu(q.from_user.id),
+        )
+
+    # =========================
+    # الاشتراك
+    # =========================
+
+    if data == "chk":
+        ok = await is_subscribed(
+            context,
+            q.from_user.id,
+            force=True,
+        )
+
+        if ok:
+            return await show(
+                q,
+                "✅ تم التحقق من الاشتراك.\n"
+                "اختر من القائمة:",
+                main_menu(q.from_user.id),
+            )
+
+        return await show(
+            q,
+            SUB_TEXT,
+            sub_markup(),
+        )
+
+    # =========================
+    # الملخصات
+    # =========================
+
+    if data == "sm":
+        return await show(
+            q,
+            "📄 اختر المادة:",
+            subjects_markup(
+                "sdm",
+                "s_count",
+                "m",
+            ),
+        )
+
+    if data.startswith("sdm:"):
+        sid = int(
+            data.split(":", 1)[1]
+        )
+
+        import ui
+
+        return await ui.summaries_list(
+            q,
+            sid,
+        )
+
+    if data.startswith("sd:"):
+        sid = int(
+            data.split(":", 1)[1]
+        )
+
+        return await send_summary(
+            q,
+            sid,
+        )
+
+    # =========================
+    # الاختبارات
+    # =========================
+
+    if data == "qm":
+        context.user_data.pop(
+            "quiz",
+            None,
+        )
+
+        context.user_data.pop(
+            "retry",
+            None,
+        )
+
+        return await show(
+            q,
+            "📝 اختر المادة:",
+            subjects_markup(
+                "qs",
+                "q_count",
+                "m",
+            ),
+        )
+
+    # اختيار المادة
+    if data.startswith("qs:"):
+        sid = int(
+            data.split(":", 1)[1]
+        )
+
+        return await quiz.show_subject_quiz(
+            q,
+            q.from_user.id,
+            sid,
+        )
+
+    # بدء الاختبار
+    if data.startswith("startq:"):
+        sid = int(
+            data.split(":", 1)[1]
+        )
+
+        return await quiz.start_quiz(
+            q,
+            context,
+            sid,
+        )
+
+    # الإجابة
+    if data.startswith("a:"):
+        return await quiz_flow.answer(
+            q,
+            context,
+            data[2:],
+        )
+
+    # السؤال التالي
+    if data == "n":
+        return await quiz_flow.next_question(
+            q,
+            context,
+        )
+
+    # إعادة الأسئلة الغلط
+    if data == "rw":
+        return await quiz.retry_wrong(
+            q,
+            context,
+        )
+
+    # النتائج
+    if data == "me":
+        return await quiz.show_stats(
+            q,
+            q.from_user.id,
+        )
+
+    # =========================
+    # الجدول
+    # =========================
+
+    if data == "sc":
+        return await timetable.open_menu(
+            q,
+            q.from_user.id,
+        )
+
+    if data == "scchg":
+        return await timetable.change_section(q)
+
+    if data.startswith("scset:"):
+        section = data.split(
+            ":",
+            1,
+        )[1]
+
+        return await timetable.set_section(
+            q,
+            context,
+            section,
+        )
+
+    if data.startswith("scday:"):
+        day = data.split(
+            ":",
+            1,
+        )[1]
+
+        return await timetable.show_day(
+            q,
+            q.from_user.id,
+            day,
+        )
+
+    # =========================
+    # التقارير والتواصل
+    # =========================
+
+    if data == "rp":
+        return await reports.show_report_info(q)
+
+    if data == "rp1":
+        return await reports.ask_report(
+            q,
+            context,
+        )
+
+    if data == "ct":
+        return await reports.show_contact(q)
+
+    # =========================
+    # الأدمن
+    # =========================
+
+    action = data.split(
+        ":",
+        1,
+    )[0]
+
+    if action in {
+        "ad",
+        "ap",
+        "ak",
+        "ay",
+        "ds",
+    }:
+        arg = (
+            data.split(":", 1)[1]
+            if ":" in data
+            else ""
+        )
+
+        if not is_admin(q.from_user.id):
+            return await show(
+                q,
+                "⛔ هذا القسم للأدمن فقط.",
+                main_menu(q.from_user.id),
+            )
+
+        return await admin.router(
+            q,
+            context,
+            action,
+            arg,
+        )
+
+    await q.message.reply_text(
+        "⚠️ هذا الزر قديم أو غير معروف.\n"
+        "استخدم /start."
     )
 
-
-# =========================================================
-# أخطاء عامة
-# =========================================================
 
 async def error_handler(
     update: object,
-    context: ContextTypes.DEFAULT_TYPE
+    context: ContextTypes.DEFAULT_TYPE,
 ):
     logger.exception(
         "Unhandled Telegram error",
-        exc_info=context.error
+        exc_info=context.error,
     )
 
 
-# =========================================================
-# تشغيل البوت
-# =========================================================
-
 def main():
-
     if not BOT_TOKEN:
         raise SystemExit(
             "❌ حط التوكن في متغير البيئة BOT_TOKEN"
@@ -420,105 +556,72 @@ def main():
         .build()
     )
 
-    # -----------------------------------------------------
-    # الأوامر
-    # -----------------------------------------------------
+    # =========================
+    # Commands
+    # =========================
 
     app.add_handler(
         CommandHandler(
             "start",
-            start
+            start,
         )
     )
 
     app.add_handler(
         CommandHandler(
             "myid",
-            myid
+            myid,
         )
     )
 
     app.add_handler(
         CommandHandler(
             "cancel",
-            cancel
+            cancel,
         )
     )
 
     app.add_handler(
         CommandHandler(
             "admin",
-            admin_cmd
+            admin_cmd,
         )
     )
 
     app.add_handler(
         CommandHandler(
             "content",
-            content_cmd
+            content_cmd,
         )
     )
 
     app.add_handler(
         CommandHandler(
             "backup",
-            backup_cmd
+            backup_cmd,
         )
     )
 
-    # -----------------------------------------------------
-    # أزرار الذكاء الاصطناعي
-    # -----------------------------------------------------
+    # =========================
+    # Callback واحد فقط
+    # =========================
 
     app.add_handler(
         CallbackQueryHandler(
-            ai_callback,
-            pattern=r"^ai:"
+            callback_router
         )
     )
 
-    # -----------------------------------------------------
-    # بقية أزرار البوت
-    # -----------------------------------------------------
-
-    app.add_handler(
-        CallbackQueryHandler(
-            quiz_flow.callback
-        )
-    )
-
-    app.add_handler(
-        CallbackQueryHandler(
-            timetable.callback
-        )
-    )
-
-    app.add_handler(
-        CallbackQueryHandler(
-            reports.callback
-        )
-    )
-
-    app.add_handler(
-        CallbackQueryHandler(
-            admin.callback
-        )
-    )
-
-    # -----------------------------------------------------
+    # =========================
     # الرسائل النصية
-    # -----------------------------------------------------
+    # =========================
 
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
-            on_message
+            on_message,
         )
     )
-
-    # -----------------------------------------------------
-    # معالج الأخطاء
-    # -----------------------------------------------------
 
     app.add_error_handler(
         error_handler
@@ -526,17 +629,13 @@ def main():
 
     print(
         "✅ البوت شغال... اضغط Ctrl+C للإيقاف",
-        flush=True
+        flush=True,
     )
 
     app.run_polling(
         allowed_updates=Update.ALL_TYPES
     )
 
-
-# =========================================================
-# MAIN
-# =========================================================
 
 if __name__ == "__main__":
     main()
