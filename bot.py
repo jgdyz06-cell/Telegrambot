@@ -6,6 +6,7 @@ import os
 import asyncio
 import tempfile
 import datetime as dt
+import threading
 from zoneinfo import ZoneInfo
 
 from telegram import Update
@@ -27,6 +28,7 @@ import quiz_flow
 import reports
 import seed
 import timetable
+import webapp
 
 from config import BOT_TOKEN, logger
 
@@ -59,7 +61,7 @@ except Exception:
 
 GEMINI_API_KEY = os.getenv(
     "GEMINI_API_KEY",
-    "",
+    ""
 ).strip()
 
 
@@ -117,24 +119,40 @@ else:
 # ============================================================
 
 AI_MODES = {
-    "grammar": "📌 الإعراب المفصل",
-    "rhetoric": "🎨 التحليل البلاغي",
-    "morphology": "⚖️ الصرف والبنية",
-    "dictionary": "📖 معجم المفردات",
-    "explain": "📝 شرح النص",
-    "prosody": "🪶 العروض والقافية",
-    "poet": "👤 الشاعر والعصر",
+
+    "grammar":
+        "📌 الإعراب المفصل",
+
+    "rhetoric":
+        "🎨 التحليل البلاغي",
+
+    "morphology":
+        "⚖️ الصرف والبنية",
+
+    "dictionary":
+        "📖 معجم المفردات",
+
+    "explain":
+        "📝 شرح النص",
+
+    "prosody":
+        "🪶 العروض والقافية",
+
+    "poet":
+        "👤 الشاعر والعصر",
+
 }
 
 
 # ============================================================
-# أدوات عامة
+# Helpers
 # ============================================================
 
 async def safe_answer(q):
 
     try:
         await q.answer()
+
     except Exception:
         pass
 
@@ -177,6 +195,10 @@ async def send_long_message(
 
         first = False
 
+
+# ============================================================
+# Access / Subscription
+# ============================================================
 
 async def check_access(
     update,
@@ -241,10 +263,12 @@ async def check_access(
 
 
 # ============================================================
-# Voice → Text
+# Voice Transcription
 # ============================================================
 
-def _transcribe_voice_file(file_path):
+def _transcribe_voice_file(
+    file_path
+):
 
     if not GEMINI_API_KEY:
 
@@ -268,37 +292,41 @@ def _transcribe_voice_file(file_path):
         "Uploading voice file to Gemini..."
     )
 
-    # Telegram Voice يكون OGG/Opus.
-    # نحدد MIME بشكل صريح حتى لا تفشل المكتبة
-    # في اكتشاف نوع الملف المؤقت.
     audio_file = voice_client.files.upload(
+
         file=file_path,
+
         config=types.UploadFileConfig(
             mime_type="audio/ogg",
         ),
+
     )
 
     logger.info(
         "Voice file uploaded successfully."
     )
 
-    interaction = voice_client.interactions.create(
-        model=VOICE_MODEL,
+    interaction = (
+        voice_client.interactions.create(
 
-        input=[
-            {
-                "type": "audio",
-                "uri": audio_file.uri,
-                "mime_type": "audio/ogg",
-            }
-        ],
+            model=VOICE_MODEL,
 
-        generation_config={
-            "transcription_config": {
-                "mode": "smart",
-                "language_codes": ["ar"],
-            }
-        },
+            input=[
+                {
+                    "type": "audio",
+                    "uri": audio_file.uri,
+                    "mime_type": "audio/ogg",
+                }
+            ],
+
+            generation_config={
+                "transcription_config": {
+                    "mode": "smart",
+                    "language_codes": ["ar"],
+                }
+            },
+
+        )
     )
 
     if not interaction:
@@ -322,7 +350,9 @@ def _transcribe_voice_file(file_path):
     return result.strip()
 
 
-async def transcribe_voice(file_path):
+async def transcribe_voice(
+    file_path
+):
 
     return await asyncio.to_thread(
         _transcribe_voice_file,
@@ -331,7 +361,7 @@ async def transcribe_voice(file_path):
 
 
 # ============================================================
-# استقبال الصوت
+# Voice Handler
 # ============================================================
 
 async def handle_voice(
@@ -354,8 +384,10 @@ async def handle_voice(
         return
 
     status = await update.message.reply_text(
+
         "🎙️ استلمت التسجيل الصوتي.\n"
         "⏳ جاري استخراج الكلام إلى نص..."
+
     )
 
     temp_path = None
@@ -399,15 +431,19 @@ async def handle_voice(
         if len(text) <= 3900:
 
             await status.edit_text(
+
                 "🎙️ النص المستخرج:\n\n"
                 + text
+
             )
 
         else:
 
             await status.edit_text(
+
                 "🎙️ النص المستخرج:\n\n"
                 + text[:3900]
+
             )
 
             remaining = text[3900:]
@@ -422,9 +458,12 @@ async def handle_voice(
                 )
 
         await update.message.reply_text(
+
             "🤖 شنو تريد أسوي للنص؟\n\n"
             "اختر نوع التحليل:",
+
             reply_markup=ai_markup(),
+
         )
 
     except Exception as error:
@@ -441,8 +480,10 @@ async def handle_voice(
         ):
 
             error_message = (
+
                 "⚠️ تم الوصول إلى حد الطلبات مؤقتاً.\n\n"
                 "انتظر قليلاً وحاول مرة ثانية."
+
             )
 
         elif (
@@ -451,8 +492,10 @@ async def handle_voice(
         ):
 
             error_message = (
+
                 "⚠️ Gemini مشغول حالياً.\n\n"
                 "حاول مرة ثانية 🔄"
+
             )
 
         elif (
@@ -462,26 +505,34 @@ async def handle_voice(
         ):
 
             error_message = (
+
                 "⏱️ Gemini تأخر بالاستجابة.\n\n"
                 "حاول مرة ثانية 🔄"
+
             )
 
         elif (
             "NOT_FOUND" in error_text
-            or "MODEL" in error_text
-            and "NOT FOUND" in error_text
+            or (
+                "MODEL" in error_text
+                and "NOT FOUND" in error_text
+            )
         ):
 
             error_message = (
+
                 "❌ نموذج تحويل الصوت غير متاح حالياً.\n\n"
                 "تحقق من إعدادات Gemini."
+
             )
 
         else:
 
             error_message = (
+
                 "❌ صار خطأ أثناء تحويل الصوت إلى نص.\n\n"
                 "حاول تسجيل مقطع أقصر وإرساله مرة ثانية."
+
             )
 
         try:
@@ -499,7 +550,6 @@ async def handle_voice(
                 )
 
             except Exception:
-
                 pass
 
     finally:
@@ -520,7 +570,7 @@ async def handle_voice(
 
 
 # ============================================================
-# /start
+# Start
 # ============================================================
 
 async def start(
@@ -563,16 +613,19 @@ async def start(
     )
 
     await update.message.reply_text(
+
         "🎓 أهلاً وسهلاً بك\n\n"
         "اختر من القائمة:",
+
         reply_markup=main_menu(
             user.id
         ),
+
     )
 
 
 # ============================================================
-# /cancel
+# Cancel
 # ============================================================
 
 async def cancel(
@@ -596,15 +649,18 @@ async def cancel(
     )
 
     await update.message.reply_text(
+
         "✅ تم الإلغاء.",
+
         reply_markup=main_menu(
             update.effective_user.id
         ),
+
     )
 
 
 # ============================================================
-# التحقق من الاشتراك
+# Subscription Verification
 # ============================================================
 
 async def verify_subscription(
@@ -642,24 +698,32 @@ async def verify_subscription(
     if ok:
 
         await show(
+
             q,
+
             "✅ تم التحقق من اشتراكك.\n\n"
             "اختر من القائمة:",
+
             main_menu(uid),
+
         )
 
     else:
 
         await show(
+
             q,
+
             "❌ بعدك غير مشترك بالقناة.\n\n"
             + SUB_TEXT,
+
             sub_markup(),
+
         )
 
 
 # ============================================================
-# القائمة الرئيسية
+# Main Menu
 # ============================================================
 
 async def show_main_menu(
@@ -676,16 +740,20 @@ async def show_main_menu(
         return
 
     await show(
+
         q,
+
         "🎓 القائمة الرئيسية:",
+
         main_menu(
             q.from_user.id
         ),
+
     )
 
 
 # ============================================================
-# تحليل AI
+# AI Handler
 # ============================================================
 
 async def handle_ai(
@@ -716,20 +784,27 @@ async def handle_ai(
     if not text:
 
         await show(
+
             q,
+
             "❌ ما عندي نص للتحليل.\n\n"
             "أرسل نص أو تسجيل صوتي أولاً.",
+
             main_menu(
                 q.from_user.id
             ),
+
         )
 
         return
 
     await show(
+
         q,
+
         "⏳ جاري التحليل...\n\n"
         + AI_MODES[mode],
+
     )
 
     try:
@@ -746,8 +821,10 @@ async def handle_ai(
         )
 
         result = (
+
             "❌ صار خطأ أثناء التحليل.\n\n"
             "حاول مرة ثانية."
+
         )
 
     context.user_data[
@@ -760,13 +837,16 @@ async def handle_ai(
     )
 
     await q.message.reply_text(
+
         "🔄 تريد تحليل النص بطريقة ثانية؟",
+
         reply_markup=ai_markup(),
+
     )
 
 
 # ============================================================
-# استقبال النص
+# Text Handler
 # ============================================================
 
 async def handle_text(
@@ -822,14 +902,17 @@ async def handle_text(
     ] = text
 
     await update.message.reply_text(
+
         "🤖 استلمت النص.\n\n"
         "اختر نوع التحليل:",
+
         reply_markup=ai_markup(),
+
     )
 
 
 # ============================================================
-# استقبال المستندات
+# Document Handler
 # ============================================================
 
 async def handle_document(
@@ -882,10 +965,6 @@ async def callback_router(
         q.data or ""
     ).strip()
 
-    # --------------------------------------------------------
-    # الاشتراك
-    # --------------------------------------------------------
-
     if data == "chk":
 
         return await verify_subscription(
@@ -893,15 +972,11 @@ async def callback_router(
             context,
         )
 
-    # --------------------------------------------------------
-    # AI
-    # --------------------------------------------------------
-
     if data.startswith("ai:"):
 
         mode = data.split(
             ":",
-            1,
+            1
         )[1]
 
         return await handle_ai(
@@ -910,19 +985,11 @@ async def callback_router(
             mode,
         )
 
-    # --------------------------------------------------------
-    # باقي الوظائف تحتاج اشتراك
-    # --------------------------------------------------------
-
     if not await check_access(
         update,
         context,
     ):
         return
-
-    # --------------------------------------------------------
-    # الرئيسية
-    # --------------------------------------------------------
 
     if data == "m":
 
@@ -931,22 +998,22 @@ async def callback_router(
             context,
         )
 
-    # --------------------------------------------------------
-    # الملخصات
-    # --------------------------------------------------------
-
     if data == "sm":
 
         await safe_answer(q)
 
         return await show(
+
             q,
+
             "📄 اختر المادة:",
+
             subjects_markup(
                 "sm",
                 "s_count",
                 "m",
             ),
+
         )
 
     if data.startswith("sm:"):
@@ -958,7 +1025,7 @@ async def callback_router(
             sid = int(
                 data.split(
                     ":",
-                    1,
+                    1
                 )[1]
             )
 
@@ -992,7 +1059,7 @@ async def callback_router(
             sum_id = int(
                 data.split(
                     ":",
-                    1,
+                    1
                 )[1]
             )
 
@@ -1005,22 +1072,22 @@ async def callback_router(
             sum_id,
         )
 
-    # --------------------------------------------------------
-    # الاختبارات
-    # --------------------------------------------------------
-
     if data == "qm":
 
         await safe_answer(q)
 
         return await show(
+
             q,
+
             "📝 اختر المادة:",
+
             subjects_markup(
                 "qs",
                 "q_count",
                 "m",
             ),
+
         )
 
     if data.startswith("qs:"):
@@ -1032,7 +1099,7 @@ async def callback_router(
             sid = int(
                 data.split(
                     ":",
-                    1,
+                    1
                 )[1]
             )
 
@@ -1055,7 +1122,7 @@ async def callback_router(
             sid = int(
                 data.split(
                     ":",
-                    1,
+                    1
                 )[1]
             )
 
@@ -1097,10 +1164,6 @@ async def callback_router(
             context,
         )
 
-    # --------------------------------------------------------
-    # الإحصائيات
-    # --------------------------------------------------------
-
     if data == "me":
 
         await safe_answer(q)
@@ -1109,10 +1172,6 @@ async def callback_router(
             q,
             q.from_user.id,
         )
-
-    # --------------------------------------------------------
-    # الجدول
-    # --------------------------------------------------------
 
     if data == "sc":
 
@@ -1128,7 +1187,7 @@ async def callback_router(
         await safe_answer(q)
 
         return await timetable.change_section(
-            q,
+            q
         )
 
     if data.startswith("scset:"):
@@ -1137,7 +1196,7 @@ async def callback_router(
 
         section = data.split(
             ":",
-            1,
+            1
         )[1]
 
         if section not in timetable.SECTIONS:
@@ -1155,7 +1214,7 @@ async def callback_router(
 
         day = data.split(
             ":",
-            1,
+            1
         )[1]
 
         if day not in timetable.DAYS_ORDER:
@@ -1167,16 +1226,12 @@ async def callback_router(
             day,
         )
 
-    # --------------------------------------------------------
-    # التقارير
-    # --------------------------------------------------------
-
     if data == "rp":
 
         await safe_answer(q)
 
         return await reports.show_report_info(
-            q,
+            q
         )
 
     if data == "rp1":
@@ -1188,21 +1243,13 @@ async def callback_router(
             context,
         )
 
-    # --------------------------------------------------------
-    # التواصل
-    # --------------------------------------------------------
-
     if data == "ct":
 
         await safe_answer(q)
 
         return await reports.show_contact(
-            q,
+            q
         )
-
-    # --------------------------------------------------------
-    # الأدمن
-    # --------------------------------------------------------
 
     if data == "ad":
 
@@ -1309,7 +1356,7 @@ async def callback_router(
 
 
 # ============================================================
-# معالجة الأخطاء
+# Error Handler
 # ============================================================
 
 async def error_handler(
@@ -1324,7 +1371,7 @@ async def error_handler(
 
 
 # ============================================================
-# تشغيل البوت
+# Main
 # ============================================================
 
 def main():
@@ -1368,7 +1415,7 @@ def main():
     )
 
     # --------------------------------------------------------
-    # Commands
+    # Telegram handlers
     # --------------------------------------------------------
 
     app.add_handler(
@@ -1385,19 +1432,11 @@ def main():
         )
     )
 
-    # --------------------------------------------------------
-    # Buttons
-    # --------------------------------------------------------
-
     app.add_handler(
         CallbackQueryHandler(
             callback_router
         )
     )
-
-    # --------------------------------------------------------
-    # Voice
-    # --------------------------------------------------------
 
     app.add_handler(
         MessageHandler(
@@ -1406,20 +1445,12 @@ def main():
         )
     )
 
-    # --------------------------------------------------------
-    # Documents
-    # --------------------------------------------------------
-
     app.add_handler(
         MessageHandler(
             filters.Document.ALL,
             handle_document,
         )
     )
-
-    # --------------------------------------------------------
-    # Text
-    # --------------------------------------------------------
 
     app.add_handler(
         MessageHandler(
@@ -1428,22 +1459,20 @@ def main():
         )
     )
 
-    # --------------------------------------------------------
-    # Errors
-    # --------------------------------------------------------
-
     app.add_error_handler(
         error_handler
     )
 
     # --------------------------------------------------------
-    # التذكير اليومي
+    # Daily timetable reminder
     # --------------------------------------------------------
 
     try:
 
         app.job_queue.run_daily(
+
             timetable.send_daily_reminders,
+
             time=dt.time(
                 hour=20,
                 minute=0,
@@ -1451,7 +1480,9 @@ def main():
                     "Asia/Baghdad"
                 ),
             ),
+
             name="daily_timetable_reminder",
+
         )
 
         logger.info(
@@ -1465,7 +1496,35 @@ def main():
         )
 
     # --------------------------------------------------------
-    # Start
+    # Web App server
+    # --------------------------------------------------------
+
+    try:
+
+        web_thread = threading.Thread(
+
+            target=webapp.start_web_server,
+
+            daemon=True,
+
+            name="webapp-server",
+
+        )
+
+        web_thread.start()
+
+        logger.info(
+            "✅ Web App server started."
+        )
+
+    except Exception:
+
+        logger.exception(
+            "❌ Could not start Web App server."
+        )
+
+    # --------------------------------------------------------
+    # Start Telegram bot
     # --------------------------------------------------------
 
     logger.info(
@@ -1481,14 +1540,18 @@ def main():
     )
 
     app.run_polling(
+
         allowed_updates=Update.ALL_TYPES,
+
         drop_pending_updates=True,
+
     )
 
 
 # ============================================================
-# Main
+# Entry Point
 # ============================================================
 
 if __name__ == "__main__":
+
     main()
