@@ -90,6 +90,15 @@ def main_menu(uid):
             ),
         ],
 
+        # شرح قواعد اللغة العربية
+        [
+            Btn(
+                "📚 شرح قواعد اللغة العربية",
+                callback_data="rules",
+                style="primary",
+            )
+        ],
+
         # تحدي الذكاء الاصطناعي
         [
             Btn(
