@@ -26,12 +26,14 @@ def is_admin(uid):
 
 
 def back_markup(target, label="🔙 رجوع"):
+
     return Markup(
         [
             [
                 Btn(
                     label,
-                    callback_data=target
+                    callback_data=target,
+                    style="primary",
                 )
             ]
         ]
@@ -53,6 +55,10 @@ async def show(q, text, markup=None):
             raise
 
 
+# ============================================================
+# القائمة الرئيسية
+# ============================================================
+
 def main_menu(uid):
 
     rows = [
@@ -60,42 +66,48 @@ def main_menu(uid):
         [
             Btn(
                 "📄 الملخصات",
-                callback_data="sm"
+                callback_data="sm",
+                style="primary",
             )
         ],
 
         [
             Btn(
                 "📝 الاختبارات",
-                callback_data="qm"
+                callback_data="qm",
+                style="success",
             )
         ],
 
         [
             Btn(
                 "📊 نتائجي",
-                callback_data="me"
+                callback_data="me",
+                style="primary",
             )
         ],
 
         [
             Btn(
                 "📅 الجدول الأسبوعي",
-                callback_data="sc"
+                callback_data="sc",
+                style="primary",
             )
         ],
 
         [
             Btn(
                 "📑 طلب تقرير",
-                callback_data="rp"
+                callback_data="rp",
+                style="success",
             )
         ],
 
         [
             Btn(
                 "📞 تواصل معنا",
-                callback_data="ct"
+                callback_data="ct",
+                style="primary",
             )
         ],
 
@@ -107,13 +119,18 @@ def main_menu(uid):
             [
                 Btn(
                     "⚙️ لوحة الأدمن",
-                    callback_data="ad"
+                    callback_data="ad",
+                    style="danger",
                 )
             ]
         )
 
     return Markup(rows)
 
+
+# ============================================================
+# أزرار الذكاء الاصطناعي
+# ============================================================
 
 def ai_markup():
 
@@ -122,43 +139,50 @@ def ai_markup():
         [
             Btn(
                 "📌 إعراب مفصل",
-                callback_data="ai:grammar"
+                callback_data="ai:grammar",
+                style="primary",
             ),
 
             Btn(
                 "🎨 تحليل بلاغي",
-                callback_data="ai:rhetoric"
+                callback_data="ai:rhetoric",
+                style="success",
             ),
         ],
 
         [
             Btn(
                 "⚖️ الصرف والبنية",
-                callback_data="ai:morphology"
+                callback_data="ai:morphology",
+                style="primary",
             ),
 
             Btn(
                 "📖 معجم المفردات",
-                callback_data="ai:dictionary"
+                callback_data="ai:dictionary",
+                style="success",
             ),
         ],
 
         [
             Btn(
                 "📝 شرح النص",
-                callback_data="ai:explain"
+                callback_data="ai:explain",
+                style="primary",
             ),
 
             Btn(
                 "🪶 عروض وقافية",
-                callback_data="ai:prosody"
+                callback_data="ai:prosody",
+                style="success",
             ),
         ],
 
         [
             Btn(
                 "👤 الشاعر والعصر",
-                callback_data="ai:poet"
+                callback_data="ai:poet",
+                style="primary",
             ),
         ],
 
@@ -166,6 +190,10 @@ def ai_markup():
 
     return Markup(rows)
 
+
+# ============================================================
+# المواد
+# ============================================================
 
 def subjects_markup(prefix, count_key=None, back="m"):
 
@@ -182,7 +210,8 @@ def subjects_markup(prefix, count_key=None, back="m"):
         buttons.append(
             Btn(
                 label,
-                callback_data=f"{prefix}:{s['id']}"
+                callback_data=f"{prefix}:{s['id']}",
+                style="primary",
             )
         )
 
@@ -195,13 +224,18 @@ def subjects_markup(prefix, count_key=None, back="m"):
         [
             Btn(
                 "🔙 رجوع",
-                callback_data=back
+                callback_data=back,
+                style="primary",
             )
         ]
     )
 
     return Markup(rows)
 
+
+# ============================================================
+# التواصل
+# ============================================================
 
 def contact_buttons():
 
@@ -210,19 +244,25 @@ def contact_buttons():
         [
             Btn(
                 "✈️ تلقرام",
-                url=f"https://t.me/{OWNER_TG}"
+                url=f"https://t.me/{OWNER_TG}",
+                style="primary",
             )
         ],
 
         [
             Btn(
                 "🟢 واتساب",
-                url=f"https://wa.me/{OWNER_WA}"
+                url=f"https://wa.me/{OWNER_WA}",
+                style="success",
             )
         ],
 
     ]
 
+
+# ============================================================
+# قائمة الملخصات
+# ============================================================
 
 async def summaries_list(q, sid):
 
@@ -251,7 +291,8 @@ async def summaries_list(q, sid):
         [
             Btn(
                 f"📄 {it['title']}",
-                callback_data=f"sd:{it['id']}"
+                callback_data=f"sd:{it['id']}",
+                style="primary",
             )
         ]
 
@@ -263,7 +304,8 @@ async def summaries_list(q, sid):
         [
             Btn(
                 "🔙 رجوع للمواد",
-                callback_data="sm"
+                callback_data="sm",
+                style="primary",
             )
         ]
     )
@@ -274,6 +316,10 @@ async def summaries_list(q, sid):
         Markup(rows)
     )
 
+
+# ============================================================
+# إرسال الملخص
+# ============================================================
 
 async def send_summary(q, sum_id):
 
@@ -299,7 +345,9 @@ async def send_summary(q, sum_id):
         )
 
 
-# ---------- الاشتراك الإجباري ----------
+# ============================================================
+# الاشتراك الإجباري
+# ============================================================
 
 SUB_TEXT = (
     "⚠️ لازم تشترك بالقناة أول عشان تستخدم البوت:\n"
@@ -316,20 +364,26 @@ def sub_markup():
             [
                 Btn(
                     "📢 اشترك بالقناة",
-                    url=CHANNEL_URL
+                    url=CHANNEL_URL,
+                    style="primary",
                 )
             ],
 
             [
                 Btn(
                     "✅ اشتركت، تحقق",
-                    callback_data="chk"
+                    callback_data="chk",
+                    style="success",
                 )
             ],
 
         ]
     )
 
+
+# ============================================================
+# التحقق من الاشتراك
+# ============================================================
 
 async def is_subscribed(
     context,
