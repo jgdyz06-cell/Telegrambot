@@ -6,6 +6,7 @@ import time
 
 from telegram import InlineKeyboardButton as Btn
 from telegram import InlineKeyboardMarkup as Markup
+from telegram import WebAppInfo
 
 from telegram.error import BadRequest
 
@@ -92,6 +93,15 @@ def main_menu(uid):
                 "📅 الجدول الأسبوعي",
                 callback_data="sc",
                 style="primary",
+            )
+        ],
+
+        [
+            Btn(
+                "🌐 فتح قطوف الأكلم",
+                web_app=WebAppInfo(
+                    url="https://telegrambot-production-4013.up.railway.app"
+                ),
             )
         ],
 
