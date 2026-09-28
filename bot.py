@@ -48,7 +48,7 @@ from ai import ask_ai
 
 
 # ============================================================
-# Gemini Voice
+# Gemini Voice + Image
 # ============================================================
 
 try:
@@ -61,9 +61,13 @@ except Exception:
 
 GEMINI_API_KEY = os.getenv(
     "GEMINI_API_KEY",
-    ""
+    "",
 ).strip()
 
+
+# ------------------------------------------------------------
+# Voice
+# ------------------------------------------------------------
 
 VOICE_MODEL = os.getenv(
     "VOICE_MODEL",
@@ -71,10 +75,25 @@ VOICE_MODEL = os.getenv(
 ).strip()
 
 
+# ------------------------------------------------------------
+# Image OCR
+# ------------------------------------------------------------
+
+IMAGE_MODEL = os.getenv(
+    "IMAGE_MODEL",
+    "gemini-3.1-flash-lite",
+).strip()
+
+
 voice_client = None
+image_client = None
 
 
 if GEMINI_API_KEY and genai is not None:
+
+    # --------------------------------------------------------
+    # Voice client
+    # --------------------------------------------------------
 
     try:
 
@@ -107,10 +126,45 @@ if GEMINI_API_KEY and genai is not None:
 
         voice_client = None
 
+    # --------------------------------------------------------
+    # Image client
+    # --------------------------------------------------------
+
+    try:
+
+        if types is not None:
+
+            image_client = genai.Client(
+                api_key=GEMINI_API_KEY,
+                http_options=types.HttpOptions(
+                    api_version="v1",
+                    timeout=60000,
+                ),
+            )
+
+        else:
+
+            image_client = genai.Client(
+                api_key=GEMINI_API_KEY,
+            )
+
+        logger.info(
+            "Gemini Image client initialized: %s",
+            IMAGE_MODEL,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Failed to initialize Gemini Image client."
+        )
+
+        image_client = None
+
 else:
 
     logger.warning(
-        "Gemini Voice client not initialized."
+        "Gemini Voice/Image clients not initialized."
     )
 
 
@@ -570,6 +624,418 @@ async def handle_voice(
 
 
 # ============================================================
+# Image OCR
+# ============================================================
+
+def _extract_text_from_image_file(
+    file_path,
+    mime_type,
+):
+
+    if not GEMINI_API_KEY:
+
+        raise RuntimeError(
+            "GEMINI_API_KEY غير موجود."
+        )
+
+    if image_client is None:
+
+        raise RuntimeError(
+            "تعذر إنشاء اتصال Gemini للصور."
+        )
+
+    prompt = """
+استخرج النص الموجود داخل الصورة فقط.
+
+مهم جداً:
+- الصورة قد تحتوي على نص عربي أو إنكليزي أو الاثنين معاً.
+- حافظ على الكلمات كما تظهر في الصورة قدر الإمكان.
+- لا تشرح الصورة.
+- لا تلخص.
+- لا تضف أي كلام من عندك.
+- لا تضع مقدمة مثل "النص هو".
+- إذا كان هناك أكثر من سطر، حافظ على ترتيب الأسطر.
+- إذا كانت هناك أسئلة أو أبيات أو جمل، اكتبها كما تظهر.
+- إذا كانت هناك كلمات غير واضحة، حاول قراءتها من السياق، وإذا تعذر ذلك اتركها كما تبدو بدلاً من اختراع كلمة.
+- أعد النص المستخرج فقط.
+"""
+
+    logger.info(
+        "Uploading image to Gemini: %s",
+        file_path,
+    )
+
+    uploaded_file = image_client.files.upload(
+        file=file_path,
+    )
+
+    if not uploaded_file:
+
+        raise RuntimeError(
+            "فشل رفع الصورة إلى Gemini."
+        )
+
+    file_uri = getattr(
+        uploaded_file,
+        "uri",
+        None,
+    )
+
+    uploaded_mime = getattr(
+        uploaded_file,
+        "mime_type",
+        None,
+    )
+
+    if not file_uri:
+
+        raise RuntimeError(
+            "Gemini لم يرجع رابط الصورة."
+        )
+
+    if not uploaded_mime:
+        uploaded_mime = mime_type or "image/jpeg"
+
+    logger.info(
+        "Image uploaded successfully."
+    )
+
+    interaction = image_client.interactions.create(
+
+        model=IMAGE_MODEL,
+
+        input=[
+
+            {
+                "type": "text",
+                "text": prompt,
+            },
+
+            {
+                "type": "image",
+                "uri": file_uri,
+                "mime_type": uploaded_mime,
+            },
+
+        ],
+
+        generation_config={
+            "thinking_level": "minimal",
+            "max_output_tokens": 2000,
+        },
+
+    )
+
+    if not interaction:
+
+        raise RuntimeError(
+            "Gemini أعاد استجابة فارغة للصورة."
+        )
+
+    result = getattr(
+        interaction,
+        "output_text",
+        None,
+    )
+
+    if not result:
+
+        raise RuntimeError(
+            "Gemini لم يرجع نصاً من الصورة."
+        )
+
+    return result.strip()
+
+
+async def extract_text_from_image(
+    file_path,
+    mime_type,
+):
+
+    return await asyncio.to_thread(
+        _extract_text_from_image_file,
+        file_path,
+        mime_type,
+    )
+
+
+# ============================================================
+# Image Handler
+# ============================================================
+
+async def handle_image(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
+
+    if not update.message:
+        return
+
+    message = update.message
+
+    photo = message.photo
+
+    document = message.document
+
+    if not photo and not document:
+        return
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    status = await message.reply_text(
+
+        "📷 استلمت الصورة.\n"
+        "⏳ جاري قراءة النص منها..."
+
+    )
+
+    temp_path = None
+
+    try:
+
+        # ----------------------------------------------------
+        # Telegram Photo
+        # ----------------------------------------------------
+
+        if photo:
+
+            telegram_file = await context.bot.get_file(
+                photo[-1].file_id
+            )
+
+            suffix = ".jpg"
+            mime_type = "image/jpeg"
+
+        # ----------------------------------------------------
+        # Image sent as Document
+        # ----------------------------------------------------
+
+        else:
+
+            telegram_file = await context.bot.get_file(
+                document.file_id
+            )
+
+            mime_type = (
+                document.mime_type
+                or "image/jpeg"
+            )
+
+            if mime_type == "image/png":
+                suffix = ".png"
+
+            elif mime_type == "image/webp":
+                suffix = ".webp"
+
+            elif mime_type == "image/gif":
+                suffix = ".gif"
+
+            else:
+                suffix = ".jpg"
+
+        # ----------------------------------------------------
+        # Download
+        # ----------------------------------------------------
+
+        with tempfile.NamedTemporaryFile(
+            suffix=suffix,
+            delete=False,
+        ) as temp_file:
+
+            temp_path = temp_file.name
+
+        await telegram_file.download_to_drive(
+            custom_path=temp_path
+        )
+
+        logger.info(
+            "Image downloaded: %s",
+            temp_path,
+        )
+
+        # ----------------------------------------------------
+        # OCR
+        # ----------------------------------------------------
+
+        text = await extract_text_from_image(
+            temp_path,
+            mime_type,
+        )
+
+        if not text:
+
+            await status.edit_text(
+
+                "❌ ما قدرت أقرأ نص واضح من الصورة.\n\n"
+                "حاول إرسال صورة أوضح."
+
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # Save extracted text for AI
+        # ----------------------------------------------------
+
+        context.user_data[
+            "ai_text"
+        ] = text
+
+        # ----------------------------------------------------
+        # Show extracted text
+        # ----------------------------------------------------
+
+        if len(text) <= 3900:
+
+            await status.edit_text(
+
+                "📷 النص المستخرج من الصورة:\n\n"
+                + text
+
+            )
+
+        else:
+
+            await status.edit_text(
+
+                "📷 النص المستخرج من الصورة:\n\n"
+                + text[:3900]
+
+            )
+
+            remaining = text[3900:]
+
+            while remaining:
+
+                chunk = remaining[:3900]
+                remaining = remaining[3900:]
+
+                await message.reply_text(
+                    chunk
+                )
+
+        # ----------------------------------------------------
+        # AI choices
+        # ----------------------------------------------------
+
+        await message.reply_text(
+
+            "🤖 شنو تريد أسوي للنص المستخرج؟\n\n"
+            "اختر نوع التحليل:",
+
+            reply_markup=ai_markup(),
+
+        )
+
+    except Exception as error:
+
+        logger.exception(
+            "Image OCR error."
+        )
+
+        error_text = str(error).upper()
+
+        if (
+            "429" in error_text
+            or "RESOURCE_EXHAUSTED" in error_text
+        ):
+
+            error_message = (
+
+                "⚠️ تم الوصول إلى حد الطلبات مؤقتاً.\n\n"
+                "انتظر قليلاً وحاول مرة ثانية."
+
+            )
+
+        elif (
+            "503" in error_text
+            or "UNAVAILABLE" in error_text
+        ):
+
+            error_message = (
+
+                "⚠️ Gemini مشغول حالياً.\n\n"
+                "حاول مرة ثانية 🔄"
+
+            )
+
+        elif (
+            "504" in error_text
+            or "TIMEOUT" in error_text
+            or "DEADLINE_EXCEEDED" in error_text
+        ):
+
+            error_message = (
+
+                "⏱️ Gemini تأخر بقراءة الصورة.\n\n"
+                "حاول إرسال الصورة مرة ثانية 🔄"
+
+            )
+
+        elif (
+            "NOT_FOUND" in error_text
+            or (
+                "MODEL" in error_text
+                and "NOT FOUND" in error_text
+            )
+        ):
+
+            error_message = (
+
+                "❌ نموذج قراءة الصور غير متاح حالياً.\n\n"
+                "تحقق من إعدادات Gemini."
+
+            )
+
+        else:
+
+            error_message = (
+
+                "❌ صار خطأ أثناء قراءة الصورة.\n\n"
+                "تأكد أن الصورة واضحة وتحتوي على نص، "
+                "ثم حاول مرة ثانية."
+
+            )
+
+        try:
+
+            await status.edit_text(
+                error_message
+            )
+
+        except Exception:
+
+            try:
+
+                await message.reply_text(
+                    error_message
+                )
+
+            except Exception:
+                pass
+
+    finally:
+
+        if temp_path:
+
+            try:
+
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+
+            except Exception:
+
+                logger.warning(
+                    "Could not remove temporary image file.",
+                    exc_info=True,
+                )
+
+
+# ============================================================
 # Start
 # ============================================================
 
@@ -798,7 +1264,7 @@ async def handle_ai(
             q,
 
             "❌ ما عندي نص للتحليل.\n\n"
-            "أرسل نص أو تسجيل صوتي أولاً.",
+            "أرسل نص أو صورة أو تسجيل صوتي أولاً.",
 
             main_menu(
                 q.from_user.id
@@ -938,6 +1404,31 @@ async def handle_document(
         context,
     ):
         return
+
+    # --------------------------------------------------------
+    # الصور المرسلة كملف
+    # --------------------------------------------------------
+
+    document = update.message.document
+
+    if document:
+
+        mime_type = (
+            document.mime_type or ""
+        ).lower()
+
+        if mime_type.startswith(
+            "image/"
+        ):
+
+            return await handle_image(
+                update,
+                context,
+            )
+
+    # --------------------------------------------------------
+    # مستندات الأدمن الحالية
+    # --------------------------------------------------------
 
     aw = context.user_data.get(
         "await"
@@ -1448,6 +1939,10 @@ def main():
         )
     )
 
+    # --------------------------------------------------------
+    # Voice
+    # --------------------------------------------------------
+
     app.add_handler(
         MessageHandler(
             filters.VOICE,
@@ -1455,12 +1950,41 @@ def main():
         )
     )
 
+    # --------------------------------------------------------
+    # Images
+    #
+    # يجب وضع الصور قبل Document.ALL حتى يتم التعامل
+    # مع الصور المرسلة كملف أيضاً.
+    # --------------------------------------------------------
+
+    app.add_handler(
+        MessageHandler(
+            filters.PHOTO,
+            handle_image,
+        )
+    )
+
+    app.add_handler(
+        MessageHandler(
+            filters.Document.IMAGE,
+            handle_image,
+        )
+    )
+
+    # --------------------------------------------------------
+    # Other documents
+    # --------------------------------------------------------
+
     app.add_handler(
         MessageHandler(
             filters.Document.ALL,
             handle_document,
         )
     )
+
+    # --------------------------------------------------------
+    # Text
+    # --------------------------------------------------------
 
     app.add_handler(
         MessageHandler(
