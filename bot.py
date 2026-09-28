@@ -7,9 +7,16 @@ import asyncio
 import tempfile
 import datetime as dt
 import threading
+import json
+import re
 from zoneinfo import ZoneInfo
 
-from telegram import Update
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
+
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -48,7 +55,7 @@ from ai import ask_ai
 
 
 # ============================================================
-# Gemini Voice + Image
+# Gemini Voice + Image + Grammar Challenge
 # ============================================================
 
 try:
@@ -81,6 +88,16 @@ VOICE_MODEL = os.getenv(
 
 IMAGE_MODEL = os.getenv(
     "IMAGE_MODEL",
+    "gemini-3.1-flash-lite",
+).strip()
+
+
+# ------------------------------------------------------------
+# Grammar Challenge
+# ------------------------------------------------------------
+
+CHALLENGE_MODEL = os.getenv(
+    "CHALLENGE_MODEL",
     "gemini-3.1-flash-lite",
 ).strip()
 
@@ -196,6 +213,13 @@ AI_MODES = {
         "👤 الشاعر والعصر",
 
 }
+
+
+# ============================================================
+# Grammar Challenge Settings
+# ============================================================
+
+CHALLENGE_TOTAL = 10
 
 
 # ============================================================
@@ -1036,6 +1060,968 @@ async def handle_image(
 
 
 # ============================================================
+# Grammar Challenge - Gemini
+# ============================================================
+
+def _clean_json_response(text):
+
+    if not text:
+        return ""
+
+    text = text.strip()
+
+    # إزالة ```json و ```
+    text = re.sub(
+        r"^```(?:json)?\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    text = re.sub(
+        r"\s*```$",
+        "",
+        text,
+    )
+
+    text = text.strip()
+
+    # إذا Gemini أضاف كلام قبل/بعد JSON
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start != -1 and end != -1 and end > start:
+
+        text = text[start:end + 1]
+
+    return text.strip()
+
+
+def _generate_grammar_question():
+
+    if not GEMINI_API_KEY:
+
+        raise RuntimeError(
+            "GEMINI_API_KEY غير موجود."
+        )
+
+    if image_client is None:
+
+        raise RuntimeError(
+            "تعذر الاتصال بخدمة Gemini."
+        )
+
+    prompt = """
+أنت مولّد أسئلة لتحدي قواعد اللغة العربية للطلاب.
+
+أنشئ سؤال قواعد عربية واحد فقط.
+
+الشروط:
+- السؤال يجب أن يكون واضحاً ومناسباً للطالب.
+- استخدم قواعد عربية مدرسية صحيحة.
+- اجعل السؤال متوسط الصعوبة.
+- يجب أن يحتوي على 4 خيارات فقط.
+- خيار واحد فقط صحيح.
+- لا تجعل أكثر من خيار صحيحاً.
+- لا تستخدم معلومات غامضة أو خلافية.
+- بعد السؤال، اكتب شرحاً قصيراً جداً لسبب صحة الإجابة.
+
+أمثلة لأنواع الأسئلة:
+- تحديد المفعول به.
+- تحديد الفاعل.
+- تحديد المبتدأ والخبر.
+- علامة الإعراب.
+- نوع الجملة.
+- كان وأخواتها.
+- إن وأخواتها.
+- النعت.
+- الحال.
+- التمييز.
+- المفعول المطلق.
+- المفعول لأجله.
+- جمع المذكر السالم.
+- المثنى.
+- الأسماء الخمسة.
+
+أعد النتيجة بصيغة JSON فقط، بدون أي كلام خارج JSON.
+
+الشكل المطلوب بالضبط:
+
+{
+  "question": "السؤال هنا",
+  "options": [
+    "الخيار الأول",
+    "الخيار الثاني",
+    "الخيار الثالث",
+    "الخيار الرابع"
+  ],
+  "correct": 0,
+  "explanation": "شرح مختصر."
+}
+
+مهم:
+- correct يجب أن يكون رقماً من 0 إلى 3.
+- options يجب أن تحتوي على 4 عناصر بالضبط.
+- لا تستخدم Markdown.
+- لا تضع ```json.
+"""
+
+    logger.info(
+        "Generating grammar challenge question..."
+    )
+
+    interaction = image_client.interactions.create(
+
+        model=CHALLENGE_MODEL,
+
+        input=prompt,
+
+        generation_config={
+            "thinking_level": "minimal",
+            "max_output_tokens": 700,
+        },
+
+    )
+
+    if not interaction:
+
+        raise RuntimeError(
+            "Gemini أعاد استجابة فارغة للسؤال."
+        )
+
+    result = getattr(
+        interaction,
+        "output_text",
+        None,
+    )
+
+    if not result:
+
+        raise RuntimeError(
+            "Gemini لم يرجع سؤالاً."
+        )
+
+    result = _clean_json_response(
+        result
+    )
+
+    try:
+
+        data = json.loads(
+            result
+        )
+
+    except Exception as error:
+
+        logger.error(
+            "Invalid challenge JSON: %s",
+            result,
+        )
+
+        raise RuntimeError(
+            "Gemini أعاد صيغة سؤال غير صالحة."
+        ) from error
+
+    question = str(
+        data.get(
+            "question",
+            "",
+        )
+    ).strip()
+
+    options = data.get(
+        "options",
+        [],
+    )
+
+    correct = data.get(
+        "correct",
+        -1,
+    )
+
+    explanation = str(
+        data.get(
+            "explanation",
+            "",
+        )
+    ).strip()
+
+    if not question:
+
+        raise RuntimeError(
+            "السؤال فارغ."
+        )
+
+    if not isinstance(
+        options,
+        list,
+    ):
+
+        raise RuntimeError(
+            "خيارات السؤال غير صالحة."
+        )
+
+    options = [
+        str(option).strip()
+        for option in options
+        if str(option).strip()
+    ]
+
+    if len(options) != 4:
+
+        raise RuntimeError(
+            "يجب أن يحتوي السؤال على أربعة خيارات."
+        )
+
+    try:
+
+        correct = int(
+            correct
+        )
+
+    except Exception:
+
+        correct = -1
+
+    if correct not in range(4):
+
+        raise RuntimeError(
+            "الإجابة الصحيحة غير صالحة."
+        )
+
+    if not explanation:
+
+        explanation = (
+            "هذه هي الإجابة الصحيحة حسب القاعدة النحوية."
+        )
+
+    return {
+        "question": question,
+        "options": options,
+        "correct": correct,
+        "explanation": explanation,
+    }
+
+
+async def generate_grammar_question():
+
+    return await asyncio.to_thread(
+        _generate_grammar_question
+    )
+
+
+# ============================================================
+# Grammar Challenge - Keyboard
+# ============================================================
+
+def grammar_challenge_markup():
+
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "1️⃣",
+                    callback_data="aich:0",
+                ),
+                InlineKeyboardButton(
+                    "2️⃣",
+                    callback_data="aich:1",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "3️⃣",
+                    callback_data="aich:2",
+                ),
+                InlineKeyboardButton(
+                    "4️⃣",
+                    callback_data="aich:3",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "❌ إلغاء التحدي",
+                    callback_data="aich:cancel",
+                ),
+            ],
+        ]
+    )
+
+
+# ============================================================
+# Send Grammar Challenge Question
+# ============================================================
+
+async def send_grammar_challenge_question(
+    q,
+    context,
+    first=False,
+):
+
+    challenge = context.user_data.get(
+        "ai_challenge"
+    )
+
+    if not challenge:
+
+        return
+
+    number = challenge.get(
+        "number",
+        1,
+    )
+
+    if first:
+
+        await q.edit_message_text(
+            "🧠 **تحدي قواعد اللغة العربية**\n\n"
+            "⏳ جاري تجهيز السؤال الأول...",
+            parse_mode="Markdown",
+        )
+
+    else:
+
+        try:
+
+            await q.edit_message_text(
+                "🧠 **تحدي قواعد اللغة العربية**\n\n"
+                f"📊 السؤال {number} من {CHALLENGE_TOTAL}\n\n"
+                "⏳ جاري تجهيز السؤال...",
+                parse_mode="Markdown",
+            )
+
+        except Exception:
+
+            pass
+
+    try:
+
+        question_data = (
+            await generate_grammar_question()
+        )
+
+    except Exception as error:
+
+        logger.exception(
+            "Grammar challenge question generation failed."
+        )
+
+        error_text = str(error).upper()
+
+        if (
+            "429" in error_text
+            or "RESOURCE_EXHAUSTED" in error_text
+        ):
+
+            message = (
+                "⚠️ تم الوصول إلى حد الطلبات مؤقتاً.\n\n"
+                "حاول مرة ثانية بعد قليل."
+            )
+
+        elif (
+            "503" in error_text
+            or "UNAVAILABLE" in error_text
+        ):
+
+            message = (
+                "⚠️ Gemini مشغول حالياً.\n\n"
+                "حاول مرة ثانية 🔄"
+            )
+
+        elif (
+            "504" in error_text
+            or "TIMEOUT" in error_text
+            or "DEADLINE_EXCEEDED" in error_text
+        ):
+
+            message = (
+                "⏱️ Gemini تأخر بتجهيز السؤال.\n\n"
+                "حاول مرة ثانية 🔄"
+            )
+
+        else:
+
+            message = (
+                "❌ ما قدرت أجهز سؤال التحدي حالياً.\n\n"
+                "حاول مرة ثانية 🔄"
+            )
+
+        try:
+
+            await q.edit_message_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "🔄 إعادة المحاولة",
+                                callback_data="aichallenge",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "🏠 القائمة الرئيسية",
+                                callback_data="m",
+                            )
+                        ],
+                    ]
+                ),
+            )
+
+        except Exception:
+
+            pass
+
+        return
+
+    challenge["question"] = (
+        question_data["question"]
+    )
+
+    challenge["options"] = (
+        question_data["options"]
+    )
+
+    challenge["correct"] = (
+        question_data["correct"]
+    )
+
+    challenge["explanation"] = (
+        question_data["explanation"]
+    )
+
+    context.user_data[
+        "ai_challenge"
+    ] = challenge
+
+    text = (
+
+        "🧠 **تحدي قواعد اللغة العربية**\n\n"
+
+        f"📊 السؤال {number} من {CHALLENGE_TOTAL}\n"
+
+        f"✅ الصحيح: {challenge.get('correct_count', 0)}\n\n"
+
+        f"❓ {question_data['question']}\n\n"
+
+        f"1️⃣ {question_data['options'][0]}\n"
+        f"2️⃣ {question_data['options'][1]}\n"
+        f"3️⃣ {question_data['options'][2]}\n"
+        f"4️⃣ {question_data['options'][3]}\n\n"
+
+        "👇 اختر الإجابة الصحيحة:"
+
+    )
+
+    try:
+
+        await q.edit_message_text(
+
+            text,
+
+            parse_mode="Markdown",
+
+            reply_markup=grammar_challenge_markup(),
+
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not display grammar challenge question."
+        )
+
+
+# ============================================================
+# Start Grammar Challenge
+# ============================================================
+
+async def start_grammar_challenge(
+    update,
+    context,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    # إعادة بدء التحدي من الصفر
+    context.user_data[
+        "ai_challenge"
+    ] = {
+
+        "number": 1,
+
+        "correct_count": 0,
+
+        "wrong_count": 0,
+
+        "question": "",
+
+        "options": [],
+
+        "correct": -1,
+
+        "explanation": "",
+
+    }
+
+    await send_grammar_challenge_question(
+        q,
+        context,
+        first=True,
+    )
+
+
+# ============================================================
+# Grammar Challenge Answer
+# ============================================================
+
+async def handle_grammar_challenge_answer(
+    update,
+    context,
+    answer_index,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    challenge = context.user_data.get(
+        "ai_challenge"
+    )
+
+    if not challenge:
+
+        await q.edit_message_text(
+
+            "❌ لا يوجد تحدي نشط حالياً.\n\n"
+            "اضغط على زر تحدي قواعد اللغة العربية من القائمة.",
+
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🧠 بدء التحدي",
+                            callback_data="aichallenge",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🏠 القائمة الرئيسية",
+                            callback_data="m",
+                        )
+                    ],
+                ]
+            ),
+
+        )
+
+        return
+
+    try:
+
+        selected = int(
+            answer_index
+        )
+
+    except Exception:
+
+        return
+
+    if selected not in range(4):
+
+        return
+
+    correct = challenge.get(
+        "correct",
+        -1,
+    )
+
+    options = challenge.get(
+        "options",
+        [],
+    )
+
+    explanation = challenge.get(
+        "explanation",
+        "",
+    )
+
+    number = challenge.get(
+        "number",
+        1,
+    )
+
+    if not isinstance(
+        options,
+        list,
+    ) or len(options) != 4:
+
+        await q.edit_message_text(
+            "❌ حدث خطأ في بيانات السؤال.\n\n"
+            "سننهي التحدي الحالي.",
+        )
+
+        context.user_data.pop(
+            "ai_challenge",
+            None,
+        )
+
+        return
+
+    selected_text = options[selected]
+
+    correct_text = options[correct]
+
+    if selected == correct:
+
+        challenge[
+            "correct_count"
+        ] = challenge.get(
+            "correct_count",
+            0,
+        ) + 1
+
+        result_text = (
+
+            "✅ **إجابة صحيحة!**\n\n"
+
+            f"إجابتك: {selected_text}\n\n"
+
+            f"📚 **الشرح:**\n"
+            f"{explanation}"
+
+        )
+
+    else:
+
+        challenge[
+            "wrong_count"
+        ] = challenge.get(
+            "wrong_count",
+            0,
+        ) + 1
+
+        result_text = (
+
+            "❌ **إجابة غير صحيحة**\n\n"
+
+            f"إجابتك: {selected_text}\n\n"
+
+            f"✅ الإجابة الصحيحة: {correct_text}\n\n"
+
+            f"📚 **الشرح:**\n"
+            f"{explanation}"
+
+        )
+
+    # --------------------------------------------------------
+    # إذا انتهت الأسئلة
+    # --------------------------------------------------------
+
+    if number >= CHALLENGE_TOTAL:
+
+        correct_count = challenge.get(
+            "correct_count",
+            0,
+        )
+
+        wrong_count = challenge.get(
+            "wrong_count",
+            0,
+        )
+
+        percentage = round(
+            (
+                correct_count
+                / CHALLENGE_TOTAL
+            ) * 100
+        )
+
+        final_text = (
+
+            result_text
+
+            + "\n\n"
+            + "━━━━━━━━━━━━━━\n\n"
+
+            + "🏁 **انتهى التحدي!**\n\n"
+
+            + f"📊 النتيجة: "
+            + f"{correct_count}/{CHALLENGE_TOTAL}\n"
+
+            + f"❌ الأخطاء: "
+            + f"{wrong_count}\n"
+
+            + f"🎯 النسبة: "
+            + f"{percentage}%\n\n"
+
+            + "👏 أحسنت! استمر بالتدريب."
+
+        )
+
+        await q.edit_message_text(
+
+            final_text,
+
+            parse_mode="Markdown",
+
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔄 تحدي جديد",
+                            callback_data="aichallenge",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🏠 القائمة الرئيسية",
+                            callback_data="m",
+                        )
+                    ],
+                ]
+            ),
+
+        )
+
+        context.user_data.pop(
+            "ai_challenge",
+            None,
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # السؤال التالي
+    # --------------------------------------------------------
+
+    challenge["number"] = (
+        number + 1
+    )
+
+    challenge["question"] = ""
+    challenge["options"] = []
+    challenge["correct"] = -1
+    challenge["explanation"] = ""
+
+    context.user_data[
+        "ai_challenge"
+    ] = challenge
+
+    # عرض نتيجة السؤال أولاً
+    await q.edit_message_text(
+
+        result_text
+        + "\n\n"
+        + f"📊 النتيجة الحالية: "
+        + f"{challenge.get('correct_count', 0)}/"
+        + f"{number}\n\n"
+        + "⏳ جاري تجهيز السؤال التالي...",
+
+        parse_mode="Markdown",
+
+    )
+
+    # تجهيز السؤال الجديد
+    try:
+
+        question_data = (
+            await generate_grammar_question()
+        )
+
+    except Exception as error:
+
+        logger.exception(
+            "Next grammar challenge question failed."
+        )
+
+        error_text = str(error).upper()
+
+        if (
+            "429" in error_text
+            or "RESOURCE_EXHAUSTED" in error_text
+        ):
+
+            message = (
+                result_text
+                + "\n\n"
+                + "⚠️ تم الوصول إلى حد الطلبات مؤقتاً.\n\n"
+                "يمكنك الضغط على إعادة المحاولة."
+            )
+
+        elif (
+            "503" in error_text
+            or "UNAVAILABLE" in error_text
+        ):
+
+            message = (
+                result_text
+                + "\n\n"
+                + "⚠️ Gemini مشغول حالياً.\n\n"
+                "حاول مرة ثانية 🔄"
+            )
+
+        else:
+
+            message = (
+                result_text
+                + "\n\n"
+                + "❌ ما قدرت أجهز السؤال التالي.\n\n"
+                "حاول مرة ثانية 🔄"
+            )
+
+        await q.edit_message_text(
+
+            message,
+
+            parse_mode="Markdown",
+
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔄 إعادة المحاولة",
+                            callback_data="aichallenge",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🏠 القائمة الرئيسية",
+                            callback_data="m",
+                        )
+                    ],
+                ]
+            ),
+
+        )
+
+        return
+
+    challenge["question"] = (
+        question_data["question"]
+    )
+
+    challenge["options"] = (
+        question_data["options"]
+    )
+
+    challenge["correct"] = (
+        question_data["correct"]
+    )
+
+    challenge["explanation"] = (
+        question_data["explanation"]
+    )
+
+    context.user_data[
+        "ai_challenge"
+    ] = challenge
+
+    text = (
+
+        "🧠 **تحدي قواعد اللغة العربية**\n\n"
+
+        f"📊 السؤال {challenge['number']} "
+        f"من {CHALLENGE_TOTAL}\n"
+
+        f"✅ الصحيح حتى الآن: "
+        f"{challenge.get('correct_count', 0)}\n\n"
+
+        f"❓ {question_data['question']}\n\n"
+
+        f"1️⃣ {question_data['options'][0]}\n"
+        f"2️⃣ {question_data['options'][1]}\n"
+        f"3️⃣ {question_data['options'][2]}\n"
+        f"4️⃣ {question_data['options'][3]}\n\n"
+
+        "👇 اختر الإجابة الصحيحة:"
+
+    )
+
+    await q.edit_message_text(
+
+        text,
+
+        parse_mode="Markdown",
+
+        reply_markup=grammar_challenge_markup(),
+
+    )
+
+
+# ============================================================
+# Cancel Grammar Challenge
+# ============================================================
+
+async def cancel_grammar_challenge(
+    update,
+    context,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    context.user_data.pop(
+        "ai_challenge",
+        None,
+    )
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    await q.edit_message_text(
+
+        "❌ تم إلغاء تحدي قواعد اللغة العربية.\n\n"
+        "يمكنك بدء تحدي جديد من القائمة الرئيسية.",
+
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "🧠 بدء التحدي",
+                        callback_data="aichallenge",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🏠 القائمة الرئيسية",
+                        callback_data="m",
+                    )
+                ],
+            ]
+        ),
+
+    )
+
+
+# ============================================================
 # Start
 # ============================================================
 
@@ -1078,6 +2064,11 @@ async def start(
         None,
     )
 
+    context.user_data.pop(
+        "ai_challenge",
+        None,
+    )
+
     await update.message.reply_text(
 
         "🎓 أهلاً وسهلاً بك\n\n"
@@ -1111,6 +2102,11 @@ async def cancel(
 
     context.user_data.pop(
         "quiz",
+        None,
+    )
+
+    context.user_data.pop(
+        "ai_challenge",
         None,
     )
 
@@ -1466,12 +2462,51 @@ async def callback_router(
         q.data or ""
     ).strip()
 
+    # ========================================================
+    # Grammar AI Challenge
+    # ========================================================
+
+    if data == "aichallenge":
+
+        return await start_grammar_challenge(
+            update,
+            context,
+        )
+
+    if data.startswith("aich:"):
+
+        value = data.split(
+            ":",
+            1
+        )[1]
+
+        if value == "cancel":
+
+            return await cancel_grammar_challenge(
+                update,
+                context,
+            )
+
+        return await handle_grammar_challenge_answer(
+            update,
+            context,
+            value,
+        )
+
+    # ========================================================
+    # Subscription
+    # ========================================================
+
     if data == "chk":
 
         return await verify_subscription(
             q,
             context,
         )
+
+    # ========================================================
+    # AI
+    # ========================================================
 
     if data.startswith("ai:"):
 
@@ -1486,11 +2521,19 @@ async def callback_router(
             mode,
         )
 
+    # ========================================================
+    # Access
+    # ========================================================
+
     if not await check_access(
         update,
         context,
     ):
         return
+
+    # ========================================================
+    # Main menu
+    # ========================================================
 
     if data == "m":
 
@@ -1498,6 +2541,10 @@ async def callback_router(
             update,
             context,
         )
+
+    # ========================================================
+    # Summaries
+    # ========================================================
 
     if data == "sm":
 
@@ -1572,6 +2619,10 @@ async def callback_router(
             q,
             sum_id,
         )
+
+    # ========================================================
+    # Quizzes
+    # ========================================================
 
     if data == "qm":
 
@@ -1674,6 +2725,10 @@ async def callback_router(
             q.from_user.id,
         )
 
+    # ========================================================
+    # Timetable
+    # ========================================================
+
     if data == "sc":
 
         await safe_answer(q)
@@ -1727,6 +2782,10 @@ async def callback_router(
             day,
         )
 
+    # ========================================================
+    # Reports
+    # ========================================================
+
     if data == "rp":
 
         await safe_answer(q)
@@ -1751,6 +2810,10 @@ async def callback_router(
         return await reports.show_contact(
             q
         )
+
+    # ========================================================
+    # Admin
+    # ========================================================
 
     if data == "ad":
 
@@ -1847,6 +2910,10 @@ async def callback_router(
             "ds",
             data[3:],
         )
+
+    # ========================================================
+    # Unknown callback
+    # ========================================================
 
     await safe_answer(q)
 
