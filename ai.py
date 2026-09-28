@@ -1,12 +1,11 @@
 # ai.py
 # ============================================================
-# Gemini AI for Telegram Bot
+# Gemini AI - Telegram Bot
 # ============================================================
 
 import os
 import asyncio
 import logging
-import random
 
 from google import genai
 from google.genai import types
@@ -30,7 +29,7 @@ GEMINI_MODEL = os.getenv(
     "gemini-3.8-flash"
 ).strip()
 
-# نخلي عدد الموديلات قليل حتى لا يطول الانتظار
+# إذا كان 3.8 مشغول، نجرب هذا مباشرة
 FALLBACK_MODELS = [
     "gemini-3.8-flash",
     "gemini-3.6-flash",
@@ -45,15 +44,38 @@ client = None
 
 if GEMINI_API_KEY:
     try:
+
         client = genai.Client(
-            api_key=GEMINI_API_KEY
+            api_key=GEMINI_API_KEY,
+
+            # مهم جداً:
+            # محاولة واحدة فقط من SDK
+            # حتى لا ينتظر البوت وقتاً طويلاً
+            http_options=types.HttpOptions(
+                retry_options=types.HttpRetryOptions(
+                    attempts=1
+                ),
+                timeout=30000
+            )
         )
-        logger.info("Gemini client initialized successfully.")
+
+        logger.info(
+            "Gemini client initialized successfully."
+        )
+
     except Exception:
-        logger.exception("Failed to initialize Gemini client.")
+
+        logger.exception(
+            "Failed to initialize Gemini client."
+        )
+
         client = None
+
 else:
-    logger.warning("GEMINI_API_KEY is not set.")
+
+    logger.warning(
+        "GEMINI_API_KEY is not set."
+    )
 
 
 # ============================================================
@@ -238,27 +260,30 @@ PROMPTS = {
 # ============================================================
 
 def check_gemini_config():
-    """
-    التأكد من وجود مفتاح Gemini.
-    """
 
     if not GEMINI_API_KEY:
-        return False, "GEMINI_API_KEY غير موجود في Railway Variables."
+        return (
+            False,
+            "GEMINI_API_KEY غير موجود في Railway Variables."
+        )
 
     if client is None:
-        return False, "تعذر إنشاء اتصال Gemini."
+        return (
+            False,
+            "تعذر إنشاء اتصال Gemini."
+        )
 
-    return True, "Gemini جاهز."
+    return (
+        True,
+        "Gemini جاهز."
+    )
 
 
 # ============================================================
-# Detect 503
+# Check 503
 # ============================================================
 
 def is_503_error(error):
-    """
-    فحص أخطاء Gemini التي تعني أن الخدمة مشغولة أو غير متاحة مؤقتاً.
-    """
 
     text = str(error).upper()
 
@@ -270,12 +295,16 @@ def is_503_error(error):
 
 
 # ============================================================
-# Generate with one model
+# Generate
 # ============================================================
 
-def _generate_with_model(model, prompt):
+def _generate_with_model(
+    model,
+    prompt
+):
 
     if client is None:
+
         raise RuntimeError(
             "Gemini client غير جاهز."
         )
@@ -292,116 +321,94 @@ def _generate_with_model(model, prompt):
     )
 
     response = client.models.generate_content(
+
         model=model,
+
         contents=full_prompt,
+
         config=types.GenerateContentConfig(
-            max_output_tokens=3000,
-        ),
+
+            max_output_tokens=3000
+
+        )
     )
 
     if not response:
+
         raise RuntimeError(
             "Gemini أعاد استجابة فارغة."
         )
 
-    text = getattr(
+    result = getattr(
         response,
         "text",
         None
     )
 
-    if not text:
+    if not result:
+
         raise RuntimeError(
-            "Gemini لم يرجع نصاً في الاستجابة."
+            "Gemini لم يرجع نصاً."
         )
 
-    return text.strip()
+    return result.strip()
 
 
 # ============================================================
-# Generate with retry + fallback
+# Main Generate
 # ============================================================
 
 def _generate(prompt):
 
     if not GEMINI_API_KEY:
+
         raise RuntimeError(
             "مفتاح Gemini غير موجود."
         )
 
     if client is None:
+
         raise RuntimeError(
             "تعذر الاتصال بخدمة Gemini."
         )
 
     last_error = None
 
-    # نحاول كل موديل بحد أقصى مرتين
+    # تجربة الموديلات مباشرة بدون انتظار
     for model in FALLBACK_MODELS:
 
-        for attempt in range(2):
+        try:
 
-            try:
+            return _generate_with_model(
+                model,
+                prompt
+            )
 
-                logger.info(
-                    "Gemini request: model=%s attempt=%s/2",
-                    model,
-                    attempt + 1
-                )
+        except Exception as error:
 
-                return _generate_with_model(
-                    model,
-                    prompt
-                )
+            last_error = error
 
-            except Exception as error:
+            if is_503_error(error):
 
-                last_error = error
-
-                # إذا الخطأ ليس 503
-                # لا نكرر المحاولة بلا داعٍ
-                if not is_503_error(error):
-
-                    logger.exception(
-                        "Gemini request failed."
-                    )
-
-                    raise RuntimeError(
-                        f"Gemini error: {error}"
-                    ) from error
-
-                # 503
                 logger.warning(
-                    "Gemini model %s returned 503 "
-                    "(attempt %s/2).",
-                    model,
-                    attempt + 1
+                    "Model %s returned 503. "
+                    "Trying next model immediately.",
+                    model
                 )
 
-                # إذا بقيت محاولة ثانية
-                if attempt == 0:
+                continue
 
-                    # تأخير 2-4 ثواني
-                    delay = 2 + random.random() * 2
+            logger.exception(
+                "Gemini request failed."
+            )
 
-                    logger.info(
-                        "Waiting %.1f seconds before retry...",
-                        delay
-                    )
+            raise RuntimeError(
+                f"Gemini error: {error}"
+            ) from error
 
-                    import time
-                    time.sleep(delay)
-
-        logger.warning(
-            "Model %s is unavailable. "
-            "Trying next fallback model.",
-            model
-        )
-
-    # إذا فشلت كل المحاولات
+    # فشل الموديلين
     raise RuntimeError(
-        "خدمة Gemini مشغولة حالياً (503). "
-        "حاول مرة أخرى بعد قليل."
+        "Gemini مشغول حالياً وأعاد 503."
     ) from last_error
 
 
@@ -413,16 +420,21 @@ async def ask_ai(
     mode,
     text
 ):
-    """
-    إرسال النص إلى Gemini حسب نوع التحليل.
-    """
+
+    # ----------------------------------------
+    # فحص النص
+    # ----------------------------------------
 
     if not text or not text.strip():
 
         return (
-            "❌ ما وصلني نص للتحليل.\n"
+            "❌ ما وصلني نص للتحليل.\n\n"
             "أرسل النص أولاً ثم اختر نوع التحليل."
         )
+
+    # ----------------------------------------
+    # فحص Gemini
+    # ----------------------------------------
 
     ok, message = check_gemini_config()
 
@@ -438,10 +450,17 @@ async def ask_ai(
             + message
         )
 
-    # إذا كان الوضع غير معروف
+    # ----------------------------------------
+    # تحديد نوع التحليل
+    # ----------------------------------------
+
     if mode not in PROMPTS:
 
         mode = "explain"
+
+    # ----------------------------------------
+    # بناء الطلب
+    # ----------------------------------------
 
     prompt = (
         PROMPTS[mode]
@@ -449,9 +468,12 @@ async def ask_ai(
         + text.strip()
     )
 
+    # ----------------------------------------
+    # إرسال الطلب
+    # ----------------------------------------
+
     try:
 
-        # تشغيل الطلب خارج event loop
         result = await asyncio.to_thread(
             _generate,
             prompt
@@ -471,32 +493,26 @@ async def ask_ai(
             "AI request failed."
         )
 
-        error_text = str(error)
-
         if is_503_error(error):
 
             return (
-                "⚠️ خدمة الذكاء الاصطناعي مشغولة حالياً.\n\n"
-                "Gemini أعاد الخطأ 503، وهذا يعني أن "
-                "الخدمة تواجه ضغطاً مؤقتاً.\n\n"
-                "🔄 حاول مرة أخرى بعد قليل."
+                "⚠️ Gemini مشغول حالياً.\n\n"
+                "حاول مرة ثانية بعد قليل 🔄"
             )
 
         return (
             "❌ حدث خطأ أثناء تحليل النص.\n\n"
-            f"التفاصيل: {error_text}"
+            f"التفاصيل: {error}"
         )
 
 
 # ============================================================
-# Simple AI Test
+# Test
 # ============================================================
 
 async def test_ai():
 
-    result = await ask_ai(
+    return await ask_ai(
         "explain",
         "العلم نور."
     )
-
-    return result
