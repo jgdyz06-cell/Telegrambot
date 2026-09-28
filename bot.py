@@ -83,7 +83,6 @@ if GEMINI_API_KEY and genai is not None:
         logger.exception(
             "Failed to initialize Gemini Voice client."
         )
-
         voice_client = None
 
 else:
@@ -112,9 +111,7 @@ AI_MODES = {
 # ============================================================
 
 def _transcribe_voice_file(file_path):
-    """
-    تحويل ملف الصوت إلى نص بواسطة Gemini.
-    """
+    """تحويل ملف الصوت إلى نص بواسطة Gemini."""
 
     if not GEMINI_API_KEY:
         raise RuntimeError(
@@ -174,10 +171,6 @@ def _transcribe_voice_file(file_path):
     return result.strip()
 
 
-# ============================================================
-# تشغيل النسخ خارج Event Loop
-# ============================================================
-
 async def transcribe_voice(file_path):
     return await asyncio.to_thread(
         _transcribe_voice_file,
@@ -201,6 +194,15 @@ async def handle_voice(
     if not voice:
         return
 
+    uid = update.effective_user.id
+
+    if not await is_subscribed(context, uid):
+        await update.message.reply_text(
+            SUB_TEXT,
+            reply_markup=sub_markup(),
+        )
+        return
+
     status = await update.message.reply_text(
         "🎙️ استلمت التسجيل الصوتي.\n"
         "⏳ جاري استخراج الكلام إلى نص..."
@@ -209,19 +211,16 @@ async def handle_voice(
     temp_path = None
 
     try:
-        # تحميل الصوت من Telegram
         telegram_file = await context.bot.get_file(
             voice.file_id
         )
 
-        # إنشاء ملف مؤقت
         with tempfile.NamedTemporaryFile(
             suffix=".ogg",
             delete=False,
         ) as temp_file:
             temp_path = temp_file.name
 
-        # تنزيل الصوت
         await telegram_file.download_to_drive(
             custom_path=temp_path
         )
@@ -231,7 +230,6 @@ async def handle_voice(
             temp_path,
         )
 
-        # تحويل الصوت إلى نص
         text = await transcribe_voice(
             temp_path
         )
@@ -242,15 +240,12 @@ async def handle_voice(
             )
             return
 
-        # حفظ النص للتحليل
         context.user_data["ai_text"] = text
 
-        # عرض النص
         if len(text) <= 3900:
             await status.edit_text(
                 "🎙️ النص المستخرج:\n\n" + text
             )
-
         else:
             await status.edit_text(
                 "🎙️ النص المستخرج:\n\n" + text[:3900]
@@ -266,7 +261,6 @@ async def handle_voice(
                     chunk
                 )
 
-        # أزرار التحليل
         await update.message.reply_text(
             "🤖 شنو تريد أسوي للنص؟\n\n"
             "اختر نوع التحليل:",
@@ -289,4 +283,137 @@ async def handle_voice(
                 "انتظر قليلاً وحاول مرة ثانية."
             )
 
-       
+        elif (
+            "503" in error_text
+            or "UNAVAILABLE" in error_text
+        ):
+            message = (
+                "⚠️ Gemini مشغول حالياً.\n\n"
+                "حاول مرة ثانية."
+            )
+
+        elif (
+            "504" in error_text
+            or "TIMEOUT" in error_text
+            or "DEADLINE" in error_text
+        ):
+            message = (
+                "⏱️ Gemini تأخر بالاستجابة.\n\n"
+                "حاول مرة ثانية."
+            )
+
+        else:
+            message = (
+                "❌ صار خطأ أثناء تحويل الصوت إلى نص.\n\n"
+                "حاول تسجيل صوت أقصر وإرساله مرة ثانية."
+            )
+
+        try:
+            await status.edit_text(message)
+        except Exception:
+            await update.message.reply_text(message)
+
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+
+
+# ============================================================
+# /start
+# ============================================================
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    uid = update.effective_user.id
+
+    try:
+        db.upsert_user(
+            uid,
+            update.effective_user.full_name,
+            update.effective_user.username,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to save user."
+        )
+
+    context.user_data.pop("await", None)
+
+    if not await is_subscribed(context, uid):
+
+        await update.message.reply_text(
+            SUB_TEXT,
+            reply_markup=sub_markup(),
+        )
+
+        return
+
+    await update.message.reply_text(
+        "👋 هلا بيك!\n\n"
+        "📚 مساعدك الدراسي جاهز.\n"
+        "اختار من القائمة:",
+        reply_markup=main_menu(uid),
+    )
+
+
+# ============================================================
+# /cancel
+# ============================================================
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    context.user_data.pop("await", None)
+
+    await update.message.reply_text(
+        "✅ تم الإلغاء.",
+        reply_markup=main_menu(
+            update.effective_user.id
+        ),
+    )
+
+
+# ============================================================
+# فحص الاشتراك
+# ============================================================
+
+async def check_subscription(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
+
+    q = update.callback_query
+
+    await q.answer()
+
+    uid = q.from_user.id
+
+    ok = await is_subscribed(
+        context,
+        uid,
+        force=True,
+    )
+
+    if not ok:
+        await show(
+            q,
+            SUB_TEXT,
+            sub_markup(),
+        )
+        return
+
+    await show(
+        q,
+        "✅ تم التحقق من الاشتراك.\n\n"
+        "هسه تقدر تستخدم البوت.",
+        main_menu(uid),
+    )
+
+
+# ============================================================
+# AI Callback
+# ============================================================
+
+async def ai
