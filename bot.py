@@ -1,129 +1,98 @@
 # -*- coding: utf-8 -*-
-"""قاعدة البيانات: المواد والملخصات + إنشاء الجداول."""
-import sqlite3
+import datetime as dt
 
-from dbcore import connect, sql_all, sql_one, sql_run
-from dbq import (  # noqa: F401
-    add_questions, best_for, clear_questions, count_questions,
-    parse_questions, questions, save_result, top, user_stats,
+from telegram import Update
+from telegram.ext import (
+    Application, CallbackQueryHandler, CommandHandler,
+    ContextTypes, MessageHandler, filters,
 )
 
-DEFAULT_SUBJECTS = [
-    "النحو", "الصرف", "البلاغة", "الأدب الإسلامي", "الحاسوب",
-    "الإنكليزي", "أسس تربية", "جرائم حزب البعث", "نصوص قديمة", "العروض والقافية",
-]
-SEED_SUMMARIES = {
-    "النحو": (
-        "ملخص النحو",
-        "https://drive.google.com/file/d/11vHek92zyJfhSXD9fIUdJadSCgyRwZ6l/view?usp=drivesdk",
-    ),
-}
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS subjects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE);
-CREATE TABLE IF NOT EXISTS summaries (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
-    title TEXT NOT NULL, url TEXT, file_id TEXT);
-CREATE TABLE IF NOT EXISTS questions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
-    question TEXT NOT NULL, options TEXT NOT NULL,
-    answer INTEGER NOT NULL, explanation TEXT NOT NULL DEFAULT '');
-CREATE TABLE IF NOT EXISTS results (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL, name TEXT NOT NULL,
-    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
-    score INTEGER NOT NULL, total INTEGER NOT NULL,
-    ts DATETIME DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY, name TEXT NOT NULL, section TEXT);
-"""
+import admin
+import admin_msg
+import backup
+import db
+import quiz
+import quiz_flow
+import reports
+import seed
+import timetable
+from config import BOT_TOKEN, logger
+from ui import (
+    SUB_TEXT, is_admin, is_subscribed, main_menu, send_summary, show,
+    sub_markup, subjects_markup, summaries_list,
+)
 
 
-def init():
-    c = connect()
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.pop("quiz", None)
+    context.user_data.pop("await", None)
+    db.upsert_user(update.effective_user.id, update.effective_user.full_name)
+    if not await is_subscribed(context, update.effective_user.id):
+        return await update.message.reply_text(SUB_TEXT, reply_markup=sub_markup())
+    await update.message.reply_text(
+        "أهلاً بيك 👋\nاختر من القائمة:", reply_markup=main_menu(update.effective_user.id)
+    )
+
+
+async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"آيديك: {update.effective_user.id}")
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.pop("await", None)
+    await update.message.reply_text(
+        "تم الإلغاء ✅", reply_markup=main_menu(update.effective_user.id)
+    )
+
+
+async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    if not is_admin(uid):
+        return await update.message.reply_text(
+            f"هذا الأمر للأدمن فقط.\nآيديك: {uid}\n(ضيفه في ADMIN_IDS)"
+        )
+    await update.message.reply_text("⚙️ لوحة الأدمن:", reply_markup=admin.panel_markup())
+
+
+async def content_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    text = "\n".join(seed.REPORT) or "ما في تقرير."
+    tail = f"\n\n🗄 القاعدة: {backup.counts()}\n♻️ آخر استعادة: {backup.LAST_RESTORE}"
+    await update.message.reply_text("📂 المحتوى المحمّل من الملفات:\n\n" + text[:3200] + tail)
+
+
+async def backup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
     try:
-        with c:
-            c.executescript(SCHEMA)
-    finally:
-        c.close()
-    if not sql_all("SELECT id FROM subjects LIMIT 1"):
-        for name in DEFAULT_SUBJECTS:
-            sid = add_subject(name)
-            if name in SEED_SUMMARIES and sid:
-                title, url = SEED_SUMMARIES[name]
-                add_summary(sid, title, url=url)
+        st = await backup.send_backup(context.bot, force=True)
+    except Exception:
+        logger.exception("backup")
+        st = "error"
+    names = {
+        "ok": "✅ انحفظت النسخة (مثبّتة بأعلى هذي المحادثة)",
+        "no_chat": "⚠️ ما في أدمن مسجّل بـ ADMIN_IDS",
+        "error": "❌ فشل الحفظ، شوف Deploy Logs",
+    }
+    await update.message.reply_text(f"{names.get(st, st)}\n🗄 {backup.counts()}")
 
 
-def subjects():
-    return sql_all("SELECT id, name FROM subjects ORDER BY id")
+async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    aw = context.user_data.get("await")
+    if aw and aw["type"] == "report":
+        return await reports.handle_report_request(update, context)
+    if aw and is_admin(update.effective_user.id):
+        return await admin_msg.handle_admin_message(update, context, aw)
+    await update.message.reply_text("اكتب /start لفتح القائمة 👇")
 
 
-def subjects_with_counts():
-    return sql_all(
-        "SELECT s.id, s.name,"
-        " (SELECT COUNT(*) FROM questions WHERE subject_id = s.id) AS q_count,"
-        " (SELECT COUNT(*) FROM summaries WHERE subject_id = s.id) AS s_count"
-        " FROM subjects s ORDER BY s.id"
-    )
+async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    uid = q.from_user.id
+    action, _, arg = q.data.partition(":")
 
-
-def get_subject(sid):
-    return sql_one("SELECT id, name FROM subjects WHERE id = ?", (sid,))
-
-
-def add_subject(name):
-    try:
-        return sql_run("INSERT INTO subjects(name) VALUES (?)", (name,))
-    except sqlite3.IntegrityError:
-        return None
-
-
-def delete_subject(sid):
-    sql_run("DELETE FROM subjects WHERE id = ?", (sid,))
-
-
-def summaries(sid):
-    return sql_all("SELECT * FROM summaries WHERE subject_id = ? ORDER BY id", (sid,))
-
-
-def get_summary(sum_id):
-    return sql_one("SELECT * FROM summaries WHERE id = ?", (sum_id,))
-
-
-def add_summary(sid, title, url=None, file_id=None):
-    return sql_run(
-        "INSERT INTO summaries(subject_id, title, url, file_id) VALUES (?,?,?,?)",
-        (sid, title, url, file_id),
-    )
-
-
-def delete_summary(sum_id):
-    sql_run("DELETE FROM summaries WHERE id = ?", (sum_id,))
-
-
-def upsert_user(uid, name):
-    sql_run(
-        "INSERT INTO users(user_id, name) VALUES (?, ?)"
-        " ON CONFLICT(user_id) DO UPDATE SET name = excluded.name",
-        (uid, name),
-    )
-
-
-def set_section(uid, section):
-    sql_run(
-        "INSERT INTO users(user_id, name, section) VALUES (?, ?, ?)"
-        " ON CONFLICT(user_id) DO UPDATE SET section = excluded.section",
-        (uid, str(uid), section),
-    )
-
-
-def get_section(uid):
-    r = sql_one("SELECT section FROM users WHERE user_id = ?", (uid,))
-    return r["section"] if r else None
-
-
-def users_with_section():
-    return sql_all("SELECT user_id, section FROM users WHERE section IS NOT NULL")
+    if action == "chk":
+        if await is_subscribed(context, uid, force=True):
+            await q.answer()
+            return await show(q, "أهلاً بيك 👋\nاختر من القائمة:", main_menu(uid
