@@ -81,7 +81,7 @@ if GEMINI_API_KEY and genai is not None:
             voice_client = genai.Client(
                 api_key=GEMINI_API_KEY,
                 http_options=types.HttpOptions(
-                    api_version="v1",
+                    api_version="v1beta",
                     timeout=60000,
                 ),
             )
@@ -188,18 +188,36 @@ async def check_access(
     if not user:
         return False
 
-    db.upsert_user(
-        user.id,
-        user.full_name,
-    )
+    try:
+
+        db.upsert_user(
+            user.id,
+            user.full_name,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not update user."
+        )
 
     if is_admin(user.id):
         return True
 
-    ok = await is_subscribed(
-        context,
-        user.id,
-    )
+    try:
+
+        ok = await is_subscribed(
+            context,
+            user.id,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Subscription check failed."
+        )
+
+        ok = False
 
     if ok:
         return True
@@ -250,9 +268,9 @@ def _transcribe_voice_file(file_path):
         "Uploading voice file to Gemini..."
     )
 
-    # Telegram Voice = OGG/Opus
-    # نحدد MIME type يدوياً حتى لا تحاول المكتبة
-    # اكتشافه من اسم الملف المؤقت.
+    # Telegram Voice يكون OGG/Opus.
+    # نحدد MIME بشكل صريح حتى لا تفشل المكتبة
+    # في اكتشاف نوع الملف المؤقت.
     audio_file = voice_client.files.upload(
         file=file_path,
         config=types.UploadFileConfig(
@@ -324,15 +342,15 @@ async def handle_voice(
     if not update.message:
         return
 
+    voice = update.message.voice
+
+    if not voice:
+        return
+
     if not await check_access(
         update,
         context,
     ):
-        return
-
-    voice = update.message.voice
-
-    if not voice:
         return
 
     status = await update.message.reply_text(
@@ -448,6 +466,17 @@ async def handle_voice(
                 "حاول مرة ثانية 🔄"
             )
 
+        elif (
+            "NOT_FOUND" in error_text
+            or "MODEL" in error_text
+            and "NOT FOUND" in error_text
+        ):
+
+            error_message = (
+                "❌ نموذج تحويل الصوت غير متاح حالياً.\n\n"
+                "تحقق من إعدادات Gemini."
+            )
+
         else:
 
             error_message = (
@@ -463,9 +492,15 @@ async def handle_voice(
 
         except Exception:
 
-            await update.message.reply_text(
-                error_message
-            )
+            try:
+
+                await update.message.reply_text(
+                    error_message
+                )
+
+            except Exception:
+
+                pass
 
     finally:
 
@@ -479,7 +514,7 @@ async def handle_voice(
             except Exception:
 
                 logger.warning(
-                    "Could not remove temp voice file.",
+                    "Could not remove temporary voice file.",
                     exc_info=True,
                 )
 
@@ -498,10 +533,18 @@ async def start(
     if not user:
         return
 
-    db.upsert_user(
-        user.id,
-        user.full_name,
-    )
+    try:
+
+        db.upsert_user(
+            user.id,
+            user.full_name,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not save user."
+        )
 
     if not await check_access(
         update,
@@ -573,11 +616,28 @@ async def verify_subscription(
 
     uid = q.from_user.id
 
-    ok = await is_subscribed(
-        context,
-        uid,
-        force=True,
-    )
+    try:
+
+        ok = await is_subscribed(
+            context,
+            uid,
+            force=True,
+        )
+
+    except TypeError:
+
+        ok = await is_subscribed(
+            context,
+            uid,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Forced subscription check failed."
+        )
+
+        ok = False
 
     if ok:
 
@@ -706,7 +766,7 @@ async def handle_ai(
 
 
 # ============================================================
-# النصوص
+# استقبال النص
 # ============================================================
 
 async def handle_text(
@@ -757,7 +817,9 @@ async def handle_text(
     if not text:
         return
 
-    context.user_data["ai_text"] = text
+    context.user_data[
+        "ai_text"
+    ] = text
 
     await update.message.reply_text(
         "🤖 استلمت النص.\n\n"
@@ -767,7 +829,7 @@ async def handle_text(
 
 
 # ============================================================
-# المستندات
+# استقبال المستندات
 # ============================================================
 
 async def handle_document(
@@ -820,7 +882,10 @@ async def callback_router(
         q.data or ""
     ).strip()
 
+    # --------------------------------------------------------
     # الاشتراك
+    # --------------------------------------------------------
+
     if data == "chk":
 
         return await verify_subscription(
@@ -828,7 +893,10 @@ async def callback_router(
             context,
         )
 
+    # --------------------------------------------------------
     # AI
+    # --------------------------------------------------------
+
     if data.startswith("ai:"):
 
         mode = data.split(
@@ -842,14 +910,20 @@ async def callback_router(
             mode,
         )
 
-    # التحقق من الاشتراك
+    # --------------------------------------------------------
+    # باقي الوظائف تحتاج اشتراك
+    # --------------------------------------------------------
+
     if not await check_access(
         update,
         context,
     ):
         return
 
+    # --------------------------------------------------------
     # الرئيسية
+    # --------------------------------------------------------
+
     if data == "m":
 
         return await show_main_menu(
@@ -892,12 +966,22 @@ async def callback_router(
 
             return
 
-        from ui import summaries_list
+        try:
 
-        return await summaries_list(
-            q,
-            sid,
-        )
+            from ui import summaries_list
+
+            return await summaries_list(
+                q,
+                sid,
+            )
+
+        except Exception:
+
+            logger.exception(
+                "summaries_list failed."
+            )
+
+            return
 
     if data.startswith("sd:"):
 
@@ -1014,7 +1098,7 @@ async def callback_router(
         )
 
     # --------------------------------------------------------
-    # النتائج
+    # الإحصائيات
     # --------------------------------------------------------
 
     if data == "me":
@@ -1283,7 +1367,10 @@ def main():
         .build()
     )
 
+    # --------------------------------------------------------
     # Commands
+    # --------------------------------------------------------
+
     app.add_handler(
         CommandHandler(
             "start",
@@ -1298,14 +1385,20 @@ def main():
         )
     )
 
+    # --------------------------------------------------------
     # Buttons
+    # --------------------------------------------------------
+
     app.add_handler(
         CallbackQueryHandler(
             callback_router
         )
     )
 
+    # --------------------------------------------------------
     # Voice
+    # --------------------------------------------------------
+
     app.add_handler(
         MessageHandler(
             filters.VOICE,
@@ -1313,7 +1406,10 @@ def main():
         )
     )
 
+    # --------------------------------------------------------
     # Documents
+    # --------------------------------------------------------
+
     app.add_handler(
         MessageHandler(
             filters.Document.ALL,
@@ -1321,7 +1417,10 @@ def main():
         )
     )
 
+    # --------------------------------------------------------
     # Text
+    # --------------------------------------------------------
+
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -1329,12 +1428,18 @@ def main():
         )
     )
 
+    # --------------------------------------------------------
     # Errors
+    # --------------------------------------------------------
+
     app.add_error_handler(
         error_handler
     )
 
+    # --------------------------------------------------------
     # التذكير اليومي
+    # --------------------------------------------------------
+
     try:
 
         app.job_queue.run_daily(
@@ -1359,6 +1464,10 @@ def main():
             "Could not schedule daily reminder."
         )
 
+    # --------------------------------------------------------
+    # Start
+    # --------------------------------------------------------
+
     logger.info(
         "=========================================="
     )
@@ -1378,7 +1487,7 @@ def main():
 
 
 # ============================================================
-# Start
+# Main
 # ============================================================
 
 if __name__ == "__main__":
