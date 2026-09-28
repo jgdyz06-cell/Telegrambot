@@ -20,6 +20,7 @@ from telegram.ext import (
 
 import admin
 import admin_msg
+import backup
 import db
 import quiz
 import quiz_flow
@@ -28,6 +29,7 @@ import seed
 import timetable
 
 from config import BOT_TOKEN, logger
+
 from ui import (
     SUB_TEXT,
     ai_markup,
@@ -49,10 +51,8 @@ from ai import ask_ai
 
 try:
     from google import genai
-    from google.genai import types
 except Exception:
     genai = None
-    types = None
 
 
 GEMINI_API_KEY = os.getenv(
@@ -74,21 +74,9 @@ if GEMINI_API_KEY and genai is not None:
 
     try:
 
-        if types is not None:
-
-            voice_client = genai.Client(
-                api_key=GEMINI_API_KEY,
-                http_options=types.HttpOptions(
-                    api_version="v1",
-                    timeout=60000,
-                ),
-            )
-
-        else:
-
-            voice_client = genai.Client(
-                api_key=GEMINI_API_KEY,
-            )
+        voice_client = genai.Client(
+            api_key=GEMINI_API_KEY,
+        )
 
         logger.info(
             "Gemini Voice client initialized: %s",
@@ -126,17 +114,22 @@ AI_MODES = {
 
 
 # ============================================================
-# أدوات مساعدة
+# أدوات عامة
 # ============================================================
+
+async def safe_answer(q):
+
+    try:
+        await q.answer()
+    except Exception:
+        pass
+
 
 async def send_long_message(
     message,
     text,
     reply_markup=None,
 ):
-    """
-    إرسال النص على عدة رسائل إذا تجاوز حد Telegram.
-    """
 
     if not text:
         return
@@ -171,15 +164,6 @@ async def send_long_message(
         first = False
 
 
-async def safe_answer(q):
-
-    try:
-        await q.answer()
-
-    except Exception:
-        pass
-
-
 async def check_access(
     update,
     context,
@@ -190,41 +174,38 @@ async def check_access(
     if not user:
         return False
 
-    uid = user.id
-
     db.upsert_user(
-        uid,
+        user.id,
         user.full_name,
     )
 
-    if is_admin(uid):
+    if is_admin(user.id):
         return True
 
     ok = await is_subscribed(
         context,
-        uid,
+        user.id,
     )
 
-    if not ok:
+    if ok:
+        return True
 
-        if update.callback_query:
+    if update.callback_query:
 
-            await show(
-                update.callback_query,
-                SUB_TEXT,
-                sub_markup(),
-            )
+        await show(
+            update.callback_query,
+            SUB_TEXT,
+            sub_markup(),
+        )
 
-        elif update.message:
+    elif update.message:
 
-            await update.message.reply_text(
-                SUB_TEXT,
-                reply_markup=sub_markup(),
-            )
+        await update.message.reply_text(
+            SUB_TEXT,
+            reply_markup=sub_markup(),
+        )
 
-        return False
-
-    return True
+    return False
 
 
 # ============================================================
@@ -259,7 +240,6 @@ def _transcribe_voice_file(file_path):
 
     interaction = voice_client.interactions.create(
         model=VOICE_MODEL,
-
         input=[
             {
                 "type": "audio",
@@ -267,7 +247,6 @@ def _transcribe_voice_file(file_path):
                 "mime_type": audio_file.mime_type,
             }
         ],
-
         generation_config={
             "transcription_config": {
                 "mode": "smart",
@@ -371,12 +350,19 @@ async def handle_voice(
 
         context.user_data["ai_text"] = text
 
-        await status.edit_text(
-            "🎙️ النص المستخرج:\n\n"
-            + text[:3900]
-        )
+        if len(text) <= 3900:
 
-        if len(text) > 3900:
+            await status.edit_text(
+                "🎙️ النص المستخرج:\n\n"
+                + text
+            )
+
+        else:
+
+            await status.edit_text(
+                "🎙️ النص المستخرج:\n\n"
+                + text[:3900]
+            )
 
             remaining = text[3900:]
 
@@ -408,7 +394,7 @@ async def handle_voice(
             or "RESOURCE_EXHAUSTED" in error_text
         ):
 
-            message = (
+            error_message = (
                 "⚠️ تم الوصول إلى حد الطلبات مؤقتاً.\n\n"
                 "انتظر قليلاً وحاول مرة ثانية."
             )
@@ -418,7 +404,7 @@ async def handle_voice(
             or "UNAVAILABLE" in error_text
         ):
 
-            message = (
+            error_message = (
                 "⚠️ Gemini مشغول حالياً.\n\n"
                 "حاول مرة ثانية 🔄"
             )
@@ -429,14 +415,14 @@ async def handle_voice(
             or "DEADLINE_EXCEEDED" in error_text
         ):
 
-            message = (
+            error_message = (
                 "⏱️ Gemini تأخر بالاستجابة.\n\n"
                 "حاول مرة ثانية 🔄"
             )
 
         else:
 
-            message = (
+            error_message = (
                 "❌ صار خطأ أثناء تحويل الصوت إلى نص.\n\n"
                 "حاول تسجيل مقطع أقصر وإرساله مرة ثانية."
             )
@@ -444,13 +430,13 @@ async def handle_voice(
         try:
 
             await status.edit_text(
-                message
+                error_message
             )
 
         except Exception:
 
             await update.message.reply_text(
-                message
+                error_message
             )
 
     finally:
@@ -459,13 +445,8 @@ async def handle_voice(
 
             try:
 
-                if os.path.exists(
-                    temp_path
-                ):
-
-                    os.remove(
-                        temp_path
-                    )
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
 
             except Exception:
 
@@ -616,113 +597,6 @@ async def show_main_menu(
 
 
 # ============================================================
-# النص العادي
-# ============================================================
-
-async def handle_text(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
-    if not update.message:
-        return
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    msg = update.message
-
-    # --------------------------------------------------------
-    # طلب تقرير
-    # --------------------------------------------------------
-
-    aw = context.user_data.get(
-        "await"
-    )
-
-    if aw:
-
-        if aw.get("type") == "report":
-
-            await reports.handle_report_request(
-                update,
-                context,
-            )
-
-            return
-
-        if is_admin(
-            update.effective_user.id
-        ):
-
-            await admin_msg.handle_admin_message(
-                update,
-                context,
-                aw,
-            )
-
-            return
-
-    # --------------------------------------------------------
-    # نص عادي → AI
-    # --------------------------------------------------------
-
-    text = (
-        msg.text or ""
-    ).strip()
-
-    if not text:
-        return
-
-    context.user_data["ai_text"] = text
-
-    await msg.reply_text(
-        "🤖 استلمت النص.\n\n"
-        "اختر نوع التحليل:",
-        reply_markup=ai_markup(),
-    )
-
-
-# ============================================================
-# الملفات / PDF للأدمن
-# ============================================================
-
-async def handle_document(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
-    if not update.message:
-        return
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    aw = context.user_data.get(
-        "await"
-    )
-
-    if (
-        aw
-        and is_admin(
-            update.effective_user.id
-        )
-    ):
-
-        await admin_msg.handle_admin_message(
-            update,
-            context,
-            aw,
-        )
-
-
-# ============================================================
 # تحليل AI
 # ============================================================
 
@@ -741,12 +615,12 @@ async def handle_ai(
         return
 
     if mode not in AI_MODES:
-
         mode = "explain"
 
     text = (
         context.user_data.get(
-            "ai_text"
+            "ai_text",
+            "",
         )
         or ""
     ).strip()
@@ -792,23 +666,111 @@ async def handle_ai(
         "last_ai_result"
     ] = result
 
-    if len(result) <= 3900:
+    await send_long_message(
+        q.message,
+        result,
+    )
 
-        await q.message.reply_text(
-            result,
-            reply_markup=ai_markup(),
+    await q.message.reply_text(
+        "🔄 تريد تحليل النص بطريقة ثانية؟",
+        reply_markup=ai_markup(),
+    )
+
+
+# ============================================================
+# النصوص
+# ============================================================
+
+async def handle_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
+
+    if not update.message:
+        return
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    aw = context.user_data.get(
+        "await"
+    )
+
+    if aw:
+
+        if aw.get("type") == "report":
+
+            await reports.handle_report_request(
+                update,
+                context,
+            )
+
+            return
+
+        if is_admin(
+            update.effective_user.id
+        ):
+
+            await admin_msg.handle_admin_message(
+                update,
+                context,
+                aw,
+            )
+
+            return
+
+    text = (
+        update.message.text or ""
+    ).strip()
+
+    if not text:
+        return
+
+    context.user_data["ai_text"] = text
+
+    await update.message.reply_text(
+        "🤖 استلمت النص.\n\n"
+        "اختر نوع التحليل:",
+        reply_markup=ai_markup(),
+    )
+
+
+# ============================================================
+# المستندات
+# ============================================================
+
+async def handle_document(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
+
+    if not update.message:
+        return
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    aw = context.user_data.get(
+        "await"
+    )
+
+    if (
+        aw
+        and is_admin(
+            update.effective_user.id
         )
+    ):
 
-    else:
-
-        await send_long_message(
-            q.message,
-            result,
-        )
-
-        await q.message.reply_text(
-            "🔄 تريد تحليل النص بطريقة ثانية؟",
-            reply_markup=ai_markup(),
+        await admin_msg.handle_admin_message(
+            update,
+            context,
+            aw,
         )
 
 
@@ -831,7 +793,7 @@ async def callback_router(
     ).strip()
 
     # --------------------------------------------------------
-    # اشتراك
+    # الاشتراك
     # --------------------------------------------------------
 
     if data == "chk":
@@ -845,9 +807,7 @@ async def callback_router(
     # AI
     # --------------------------------------------------------
 
-    if data.startswith(
-        "ai:"
-    ):
+    if data.startswith("ai:"):
 
         mode = data.split(
             ":",
@@ -861,7 +821,7 @@ async def callback_router(
         )
 
     # --------------------------------------------------------
-    # فحص الاشتراك قبل باقي الأزرار
+    # باقي الأزرار تحتاج اشتراك
     # --------------------------------------------------------
 
     if not await check_access(
@@ -899,43 +859,45 @@ async def callback_router(
             ),
         )
 
-    if data.startswith(
-        "sm:"
-    ):
+    if data.startswith("sm:"):
 
         await safe_answer(q)
 
-        sid = data.split(
-            ":",
-            1,
-        )[1]
-
         try:
-            sid = int(sid)
+
+            sid = int(
+                data.split(
+                    ":",
+                    1,
+                )[1]
+            )
+
         except ValueError:
+
             return
 
-        return await __import__(
-            "ui"
-        ).summaries_list(
+        from ui import summaries_list
+
+        return await summaries_list(
             q,
             sid,
         )
 
-    if data.startswith(
-        "sd:"
-    ):
+    if data.startswith("sd:"):
 
         await safe_answer(q)
 
         try:
+
             sum_id = int(
                 data.split(
                     ":",
                     1,
                 )[1]
             )
+
         except ValueError:
+
             return
 
         return await send_summary(
@@ -961,20 +923,21 @@ async def callback_router(
             ),
         )
 
-    if data.startswith(
-        "qs:"
-    ):
+    if data.startswith("qs:"):
 
         await safe_answer(q)
 
         try:
+
             sid = int(
                 data.split(
                     ":",
                     1,
                 )[1]
             )
+
         except ValueError:
+
             return
 
         return await quiz.show_subject_quiz(
@@ -983,20 +946,21 @@ async def callback_router(
             sid,
         )
 
-    if data.startswith(
-        "startq:"
-    ):
+    if data.startswith("startq:"):
 
         await safe_answer(q)
 
         try:
+
             sid = int(
                 data.split(
                     ":",
                     1,
                 )[1]
             )
+
         except ValueError:
+
             return
 
         return await quiz.start_quiz(
@@ -1005,9 +969,7 @@ async def callback_router(
             sid,
         )
 
-    if data.startswith(
-        "a:"
-    ):
+    if data.startswith("a:"):
 
         await safe_answer(q)
 
@@ -1069,9 +1031,7 @@ async def callback_router(
             q,
         )
 
-    if data.startswith(
-        "scset:"
-    ):
+    if data.startswith("scset:"):
 
         await safe_answer(q)
 
@@ -1089,9 +1049,7 @@ async def callback_router(
             section,
         )
 
-    if data.startswith(
-        "scday:"
-    ):
+    if data.startswith("scday:"):
 
         await safe_answer(q)
 
@@ -1153,13 +1111,7 @@ async def callback_router(
         if not is_admin(
             q.from_user.id
         ):
-            return await show(
-                q,
-                "❌ هذا القسم للأدمن فقط.",
-                main_menu(
-                    q.from_user.id
-                ),
-            )
+            return
 
         return await admin.router(
             q,
@@ -1168,9 +1120,7 @@ async def callback_router(
             "",
         )
 
-    if data.startswith(
-        "ad:"
-    ):
+    if data.startswith("ad:"):
 
         await safe_answer(q)
 
@@ -1186,9 +1136,7 @@ async def callback_router(
             data[3:],
         )
 
-    if data.startswith(
-        "ap:"
-    ):
+    if data.startswith("ap:"):
 
         await safe_answer(q)
 
@@ -1204,9 +1152,7 @@ async def callback_router(
             data[3:],
         )
 
-    if data.startswith(
-        "ak:"
-    ):
+    if data.startswith("ak:"):
 
         await safe_answer(q)
 
@@ -1222,9 +1168,7 @@ async def callback_router(
             data[3:],
         )
 
-    if data.startswith(
-        "ay:"
-    ):
+    if data.startswith("ay:"):
 
         await safe_answer(q)
 
@@ -1240,9 +1184,7 @@ async def callback_router(
             data[3:],
         )
 
-    if data.startswith(
-        "ds:"
-    ):
+    if data.startswith("ds:"):
 
         await safe_answer(q)
 
@@ -1258,10 +1200,6 @@ async def callback_router(
             data[3:],
         )
 
-    # --------------------------------------------------------
-    # زر غير معروف
-    # --------------------------------------------------------
-
     await safe_answer(q)
 
     logger.warning(
@@ -1271,7 +1209,7 @@ async def callback_router(
 
 
 # ============================================================
-# خطأ عام
+# معالجة الأخطاء
 # ============================================================
 
 async def error_handler(
@@ -1286,7 +1224,7 @@ async def error_handler(
 
 
 # ============================================================
-# Main
+# تشغيل البوت
 # ============================================================
 
 def main():
@@ -1324,6 +1262,8 @@ def main():
     app = (
         Application.builder()
         .token(BOT_TOKEN)
+        .post_init(backup.startup)
+        .post_shutdown(backup.shutdown)
         .build()
     )
 
@@ -1346,7 +1286,7 @@ def main():
     )
 
     # --------------------------------------------------------
-    # Callbacks
+    # Callback buttons
     # --------------------------------------------------------
 
     app.add_handler(
@@ -1367,7 +1307,7 @@ def main():
     )
 
     # --------------------------------------------------------
-    # PDF / Documents
+    # Documents
     # --------------------------------------------------------
 
     app.add_handler(
@@ -1383,14 +1323,13 @@ def main():
 
     app.add_handler(
         MessageHandler(
-            filters.TEXT
-            & ~filters.COMMAND,
+            filters.TEXT & ~filters.COMMAND,
             handle_text,
         )
     )
 
     # --------------------------------------------------------
-    # Error handler
+    # Errors
     # --------------------------------------------------------
 
     app.add_error_handler(
@@ -1398,9 +1337,54 @@ def main():
     )
 
     # --------------------------------------------------------
-    # Daily timetable reminder
+    # تذكير الجدول اليومي
     # --------------------------------------------------------
 
     try:
 
-        app.job_queue.run
+        app.job_queue.run_daily(
+            timetable.send_daily_reminders,
+            time=dt.time(
+                hour=20,
+                minute=0,
+                tzinfo=ZoneInfo(
+                    "Asia/Baghdad"
+                ),
+            ),
+            name="daily_timetable_reminder",
+        )
+
+        logger.info(
+            "Daily timetable reminder scheduled."
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not schedule daily reminder."
+        )
+
+    logger.info(
+        "=========================================="
+    )
+
+    logger.info(
+        "✅ البوت شغال..."
+    )
+
+    logger.info(
+        "=========================================="
+    )
+
+    app.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+    )
+
+
+# ============================================================
+# Start
+# ============================================================
+
+if __name__ == "__main__":
+    main()
