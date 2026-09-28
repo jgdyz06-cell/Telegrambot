@@ -1,5 +1,5 @@
-# ai.py
-# Gemini AI integration for Telegram bot
+# -*- coding: utf-8 -*-
+"""Gemini AI integration for Telegram bot."""
 
 import os
 import asyncio
@@ -13,10 +13,15 @@ from google.genai import types
 # إعدادات Gemini
 # =========================================================
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_API_KEY = os.getenv(
+    "GEMINI_API_KEY",
+    ""
+).strip()
 
-# تقدر تغيّر الموديل من Railway Variables إذا احتجت
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
+GEMINI_MODEL = os.getenv(
+    "GEMINI_MODEL",
+    "gemini-3.8-flash"
+).strip()
 
 
 # =========================================================
@@ -27,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 # =========================================================
-# التعليمات الأساسية للذكاء الاصطناعي
+# التعليمات الأساسية
 # =========================================================
 
 SYSTEM_PROMPT = """
@@ -127,7 +132,8 @@ PROMPTS = {
 - لسان العرب
 - المعجم الوسيط
 
-لا تخترع نصوصاً من المعاجم ولا تنسب اقتباساً حرفياً إليها إذا لم تكن متأكداً.
+لا تخترع نصوصاً من المعاجم ولا تنسب اقتباساً حرفياً
+إليها إذا لم تكن متأكداً.
 
 النص:
 {text}
@@ -194,13 +200,10 @@ PROMPTS = {
 
 
 # =========================================================
-# التحقق من الإعدادات
+# فحص الإعدادات
 # =========================================================
 
 def check_gemini_config():
-    """
-    فحص إعدادات Gemini بدون إظهار مفتاح API.
-    """
 
     if not GEMINI_API_KEY:
         raise RuntimeError(
@@ -218,15 +221,11 @@ def check_gemini_config():
 # =========================================================
 
 def _generate(prompt: str) -> str:
-    """
-    إرسال الطلب إلى Gemini.
-    هذه الدالة متزامنة ويتم تشغيلها داخل thread من ask_ai.
-    """
 
     check_gemini_config()
 
     try:
-        # إنشاء Client باستخدام مفتاح Railway
+
         client = genai.Client(
             api_key=GEMINI_API_KEY
         )
@@ -238,22 +237,26 @@ def _generate(prompt: str) -> str:
 {prompt}
 """
 
+        # Gemini 3.8 Flash
+        # لا نرسل temperature / top_p / top_k
         response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=full_prompt,
             config=types.GenerateContentConfig(
-                temperature=0.3,
                 max_output_tokens=3000,
             ),
         )
 
-        # التأكد من وجود جواب
         if response is None:
             raise RuntimeError(
                 "Gemini أعاد استجابة فارغة."
             )
 
-        text = getattr(response, "text", None)
+        text = getattr(
+            response,
+            "text",
+            None,
+        )
 
         if not text:
             raise RuntimeError(
@@ -263,9 +266,7 @@ def _generate(prompt: str) -> str:
         return text.strip()
 
     except Exception as e:
-        # مهم جداً:
-        # نطبع نوع الخطأ وتفاصيله في Railway Logs
-        # بدون طباعة مفتاح API.
+
         logger.exception(
             "Gemini API Error: %s: %s",
             type(e).__name__,
@@ -273,28 +274,19 @@ def _generate(prompt: str) -> str:
         )
 
         raise RuntimeError(
-            f"Gemini API Error: {type(e).__name__}: {e}"
+            f"Gemini API Error: "
+            f"{type(e).__name__}: {e}"
         ) from e
 
 
 # =========================================================
-# الدالة الرئيسية التي يستخدمها bot.py
+# الدالة الرئيسية
 # =========================================================
 
-async def ask_ai(mode: str, text: str) -> str:
-    """
-    mode:
-        grammar
-        rhetoric
-        morphology
-        dictionary
-        explain
-        prosody
-        poet
-
-    text:
-        النص الذي يريد المستخدم تحليله.
-    """
+async def ask_ai(
+    mode: str,
+    text: str,
+) -> str:
 
     if not text or not text.strip():
         return "❌ ماكو نص حتى أحلله."
@@ -304,54 +296,53 @@ async def ask_ai(mode: str, text: str) -> str:
     if mode not in PROMPTS:
         return "❌ نوع التحليل غير معروف."
 
-    prompt = PROMPTS[mode].format(text=text)
+    prompt = PROMPTS[mode].format(
+        text=text
+    )
 
     try:
+
         result = await asyncio.to_thread(
             _generate,
-            prompt
+            prompt,
         )
 
         return result
 
     except Exception as e:
-        # نسجل الخطأ في Railway
+
         logger.exception(
             "ask_ai failed: %s: %s",
             type(e).__name__,
             str(e),
         )
 
-        # نخلي المستخدم يعرف أن المشكلة من الاتصال
-        # بدون كشف معلومات حساسة
         return (
             "❌ صار خطأ أثناء الاتصال بـ Gemini.\n\n"
-            "حتى نعرف السبب الحقيقي، افتح Railway → Logs "
-            "وشوف آخر رسالة خطأ ظهرت بعد ضغط الزر.\n\n"
             f"نوع الخطأ: {type(e).__name__}"
         )
 
 
 # =========================================================
-# دالة اختبار اختيارية
+# اختبار Gemini
 # =========================================================
 
 async def test_ai() -> str:
-    """
-    اختبار بسيط للاتصال بـ Gemini.
-    """
 
     try:
+
         result = await asyncio.to_thread(
             _generate,
-            "اكتب كلمة: تم الاتصال بنجاح، ثم اشرح بإيجاز معنى كلمة العلم."
+            "اكتب كلمة: تم الاتصال بنجاح، "
+            "ثم اشرح بإيجاز معنى كلمة العلم."
         )
 
         return result
 
     except Exception as e:
+
         return (
-            f"❌ فشل اختبار Gemini\n"
+            "❌ فشل اختبار Gemini\n"
             f"نوع الخطأ: {type(e).__name__}\n"
             f"التفاصيل: {e}"
         )
