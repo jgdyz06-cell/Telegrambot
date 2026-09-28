@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """الجدول الأسبوعي للمحاضرات + التذكير التلقائي اليومي."""
+
 import asyncio
 import datetime as dt
 
@@ -11,15 +12,22 @@ from config import logger
 from ui import show
 
 SECTIONS = ["أ", "ب", "ج"]
+
+# أيام الدوام الفعلية الموجودة بالجدول
 DAYS_ORDER = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"]
 
 # date.weekday(): الاثنين=0 ... الأحد=6
 WEEKDAY_AR = {
-    6: "الأحد", 0: "الاثنين", 1: "الثلاثاء", 2: "الأربعاء",
-    3: "الخميس", 4: "الجمعة", 5: "السبت",
+    6: "الأحد",
+    0: "الاثنين",
+    1: "الثلاثاء",
+    2: "الأربعاء",
+    3: "الخميس",
+    4: "الجمعة",
+    5: "السبت",
 }
 
-# كل صف: (بداية، نهاية، المادة، المدرس) — المدرس فاضي إذا غير مذكور بالمصدر
+# كل صف: (بداية، نهاية، المادة، المدرس)
 SCHEDULE = {
     "الأحد": {
         "أ": [
@@ -41,6 +49,7 @@ SCHEDULE = {
             ("11:30", "12:30", "النحو", "أ.د. خالد أحمد"),
         ],
     },
+
     "الاثنين": {
         "أ": [
             ("08:30", "09:30", "البلاغة", "أ.د. سعد"),
@@ -64,6 +73,7 @@ SCHEDULE = {
             ("12:30", "01:30", "النحو", "أ.د. خالد أحمد"),
         ],
     },
+
     "الثلاثاء": {
         "أ": [
             ("08:30", "09:30", "نصوص قديمة", "د. ليلى"),
@@ -87,6 +97,7 @@ SCHEDULE = {
             ("12:30", "01:30", "الإدارة والتخطيط التربوي", ""),
         ],
     },
+
     "الأربعاء": {
         "أ": [
             ("08:30", "09:30", "اخلاقيات مهنة التعلم", "م.م. شذى سالم"),
@@ -107,6 +118,7 @@ SCHEDULE = {
             ("11:30", "12:30", "اخلاقيات مهنة التعلم", "م.م. شذى سالم"),
         ],
     },
+
     "الخميس": {
         "أ": [
             ("08:30", "09:30", "اخلاقيات مهنة التعلم", "م.م. شذى سالم"),
@@ -132,72 +144,220 @@ SCHEDULE = {
 
 def format_day(day, section):
     rows = SCHEDULE.get(day, {}).get(section, [])
+
     if not rows:
         return f"📅 {day} — شعبة {section}\n\nما في محاضرات مسجّلة."
-    lines = [f"📅 {day} — شعبة {section}", ""]
+
+    lines = [
+        f"📅 {day} — شعبة {section}",
+        "",
+    ]
+
     for start, end, subject, teacher in rows:
         t = f" — {teacher}" if teacher else ""
-        lines.append(f"🕒 {start} - {end}: {subject}{t}")
+        lines.append(
+            f"🕒 {start} - {end}: {subject}{t}"
+        )
+
     return "\n".join(lines)
 
 
 def section_markup():
-    return Markup([[Btn(f"شعبة {s}", callback_data=f"scset:{s}")] for s in SECTIONS])
+    return Markup(
+        [
+            [
+                Btn(
+                    f"شعبة {s}",
+                    callback_data=f"scset:{s}"
+                )
+            ]
+            for s in SECTIONS
+        ]
+    )
 
 
 def days_markup(back="m"):
-    rows = [[Btn(d, callback_data=f"scday:{d}")] for d in DAYS_ORDER]
-    rows.append([Btn("🔁 تغيير الشعبة", callback_data="scchg")])
-    rows.append([Btn("🔙 رجوع", callback_data=back)])
+    rows = [
+        [
+            Btn(
+                d,
+                callback_data=f"scday:{d}"
+            )
+        ]
+        for d in DAYS_ORDER
+    ]
+
+    rows.append(
+        [
+            Btn(
+                "🔁 تغيير الشعبة",
+                callback_data="scchg"
+            )
+        ]
+    )
+
+    rows.append(
+        [
+            Btn(
+                "🔙 رجوع",
+                callback_data=back
+            )
+        ]
+    )
+
     return Markup(rows)
 
 
 async def open_menu(q, uid):
     section = db.get_section(uid)
+
     if not section:
         return await show(
-            q, "📅 اختر شعبتك أول مرة (تقدر تغيّرها بعدين):", section_markup()
+            q,
+            "📅 اختر شعبتك أول مرة (تقدر تغيّرها بعدين):",
+            section_markup()
         )
-    await show(q, f"📅 شعبتك: {section}\nاختر اليوم:", days_markup())
+
+    await show(
+        q,
+        f"📅 شعبتك: {section}\nاختر اليوم:",
+        days_markup()
+    )
 
 
 async def set_section(q, context, section):
-    db.set_section(q.from_user.id, section)
-    await show(q, f"✅ تحفظت شعبتك: {section}\nاختر اليوم:", days_markup())
+    db.set_section(
+        q.from_user.id,
+        section
+    )
+
+    await show(
+        q,
+        f"✅ تحفظت شعبتك: {section}\nاختر اليوم:",
+        days_markup()
+    )
 
 
 async def change_section(q):
-    await show(q, "📅 اختر شعبتك:", section_markup())
+    await show(
+        q,
+        "📅 اختر شعبتك:",
+        section_markup()
+    )
 
 
 async def show_day(q, uid, day):
     section = db.get_section(uid)
+
     if not section:
         return await open_menu(q, uid)
-    await show(q, format_day(day, section), days_markup())
+
+    await show(
+        q,
+        format_day(day, section),
+        days_markup()
+    )
 
 
-def tomorrow_day_name(now):
-    tmr = now.date() + dt.timedelta(days=1)
-    return WEEKDAY_AR.get(tmr.weekday())
+def next_study_day(now):
+    """
+    يرجع أقرب يوم دوام بعد التاريخ الحالي.
+
+    يتجاوز:
+    - الجمعة
+    - السبت
+    - أي يوم غير موجود في SCHEDULE
+
+    مثال:
+    الخميس → الأحد
+    الجمعة → الأحد
+    السبت → الأحد
+    """
+
+    current_date = now.date()
+
+    for days_ahead in range(1, 8):
+        target_date = current_date + dt.timedelta(
+            days=days_ahead
+        )
+
+        day_name = WEEKDAY_AR.get(
+            target_date.weekday()
+        )
+
+        if day_name in SCHEDULE:
+            return day_name
+
+    return None
 
 
 async def send_daily_reminders(context):
-    now = context.job.data if getattr(context, "job", None) and context.job.data else None
+    """
+    إرسال تذكير الساعة 9 مساءً
+    بأقرب يوم دوام قادم.
+
+    مثال:
+    الخميس 9 مساءً
+    → يرسل جدول الأحد.
+
+    الجمعة 9 مساءً
+    → يرسل جدول الأحد.
+
+    السبت 9 مساءً
+    → يرسل جدول الأحد.
+    """
+
     from zoneinfo import ZoneInfo
-    now = now or dt.datetime.now(ZoneInfo("Asia/Baghdad"))
-    day = tomorrow_day_name(now)
-    if day not in SCHEDULE:
-        logger.info("باچر (%s) عطلة، ما راح أرسل تذكير.", day)
+
+    now = (
+        context.job.data
+        if getattr(context, "job", None)
+        and context.job.data
+        else None
+    )
+
+    now = now or dt.datetime.now(
+        ZoneInfo("Asia/Baghdad")
+    )
+
+    day = next_study_day(now)
+
+    if not day:
+        logger.info(
+            "ماكو يوم دوام قادم بالتقويم الحالي."
+        )
         return
+
     bot = context.bot
     sent = 0
-    for u in db.users_with_section():
-        text = f"🔔 تذكير: باچر {day} وعندكم محاضرات.\n\n" + format_day(day, u["section"])
+
+    users = db.users_with_section()
+
+    for u in users:
+        text = (
+            f"🔔 تذكير بالجدول الدراسي\n\n"
+            f"📚 باچر دوام: {day}\n\n"
+            f"{format_day(day, u['section'])}"
+        )
+
         try:
-            await bot.send_message(u["user_id"], text)
+            await bot.send_message(
+                u["user_id"],
+                text
+            )
             sent += 1
+
         except Exception:
-            logger.warning("ما قدرت أرسل التذكير لـ %s", u["user_id"], exc_info=True)
+            logger.warning(
+                "ما قدرت أرسل التذكير لـ %s",
+                u["user_id"],
+                exc_info=True
+            )
+
         await asyncio.sleep(0.05)
-    logger.info("أُرسل تذكير %s لـ %s طالب.", day, sent)
+
+    logger.info(
+        "أُرسل تذكير جدول %s لـ %s طالب.",
+        day,
+        sent
+    )
