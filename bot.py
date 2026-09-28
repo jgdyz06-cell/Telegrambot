@@ -3,7 +3,6 @@
 import datetime as dt
 
 from telegram import Update
-
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -65,20 +64,9 @@ async def start(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    context.user_data.pop(
-        "quiz",
-        None
-    )
-
-    context.user_data.pop(
-        "await",
-        None
-    )
-
-    context.user_data.pop(
-        "ai_text",
-        None
-    )
+    context.user_data.pop("quiz", None)
+    context.user_data.pop("await", None)
+    context.user_data.pop("ai_text", None)
 
     db.upsert_user(
         update.effective_user.id,
@@ -89,7 +77,6 @@ async def start(
         context,
         update.effective_user.id
     ):
-
         return await update.message.reply_text(
             SUB_TEXT,
             reply_markup=sub_markup()
@@ -156,7 +143,6 @@ async def admin_cmd(
     uid = update.effective_user.id
 
     if not is_admin(uid):
-
         return await update.message.reply_text(
             f"هذا الأمر للأدمن فقط.\n"
             f"آيديك: {uid}\n"
@@ -181,7 +167,6 @@ async def content_cmd(
     if not is_admin(
         update.effective_user.id
     ):
-
         return
 
     text = (
@@ -213,24 +198,19 @@ async def backup_cmd(
     if not is_admin(
         update.effective_user.id
     ):
-
         return
 
     try:
-
         st = await backup.send_backup(
             context.bot,
             force=True
         )
 
     except Exception:
-
         logger.exception("backup")
-
         st = "error"
 
     names = {
-
         "ok":
             "✅ انحفظت النسخة "
             "(مثبّتة بأعلى هذي المحادثة)",
@@ -240,7 +220,6 @@ async def backup_cmd(
 
         "error":
             "❌ فشل الحفظ، شوف Deploy Logs",
-
     }
 
     await update.message.reply_text(
@@ -270,7 +249,6 @@ async def on_message(
         aw
         and aw["type"] == "report"
     ):
-
         return await reports.handle_report_request(
             update,
             context
@@ -286,7 +264,6 @@ async def on_message(
             update.effective_user.id
         )
     ):
-
         return await admin_msg.handle_admin_message(
             update,
             context,
@@ -302,10 +279,9 @@ async def on_message(
         text = update.message.text.strip()
 
         if not text:
-
             return
 
-        # نحفظ النص حتى تستخدمه أزرار التحليل
+        # حفظ النص حتى تستخدمه أزرار الذكاء الاصطناعي
         context.user_data["ai_text"] = text
 
         await update.message.reply_text(
@@ -342,7 +318,6 @@ async def handle_ai(
     )
 
     if not text:
-
         return await q.message.reply_text(
             "⚠️ ما عندي نص أحلله.\n"
             "أرسل بيت شعر أو جملة أولاً."
@@ -353,4 +328,391 @@ async def handle_ai(
         "🤖 تحليل الذكاء الاصطناعي"
     )
 
-   
+    try:
+
+        result = await ask_ai(
+            mode,
+            text
+        )
+
+        await q.message.reply_text(
+            f"{title}\n\n{result}"
+        )
+
+    except Exception as e:
+
+        logger.exception(
+            "AI callback failed"
+        )
+
+        await q.message.reply_text(
+            "❌ صار خطأ أثناء تحليل النص.\n\n"
+            f"نوع الخطأ: {type(e).__name__}\n"
+            "راجع Railway Logs."
+        )
+
+
+# =========================================================
+# معالجة جميع أزرار البوت
+# =========================================================
+
+async def callbacks(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    q = update.callback_query
+
+    await q.answer()
+
+    data = q.data or ""
+
+    # =====================================================
+    # الذكاء الاصطناعي
+    # =====================================================
+
+    if data.startswith("ai:"):
+
+        mode = data.split(
+            ":",
+            1
+        )[1]
+
+        text = context.user_data.get(
+            "ai_text"
+        )
+
+        if not text:
+
+            return await q.message.reply_text(
+                "⚠️ ما عندي نص أحلله.\n"
+                "أرسل بيت شعر أو جملة أولاً."
+            )
+
+        status_message = await q.message.reply_text(
+            "🤖 جاري التحليل بالذكاء الاصطناعي...\n"
+            "⏳ انتظر قليلاً."
+        )
+
+        try:
+
+            result = await ask_ai(
+                mode,
+                text
+            )
+
+            title = AI_MODES.get(
+                mode,
+                "🤖 تحليل الذكاء الاصطناعي"
+            )
+
+            await status_message.edit_text(
+                f"{title}\n\n{result}"
+            )
+
+        except Exception as e:
+
+            logger.exception(
+                "AI callback failed"
+            )
+
+            await status_message.edit_text(
+                "❌ صار خطأ أثناء تحليل النص.\n\n"
+                f"نوع الخطأ: {type(e).__name__}\n\n"
+                "راجع Railway Logs لمعرفة السبب."
+            )
+
+        return
+
+    # =====================================================
+    # القائمة الرئيسية
+    # =====================================================
+
+    if data == "m":
+
+        return await show(
+            q,
+            "أهلاً بيك 👋\nاختر من القائمة:",
+            main_menu(
+                q.from_user.id
+            )
+        )
+
+    # =====================================================
+    # الاشتراك
+    # =====================================================
+
+    if data == "chk":
+
+        ok = await is_subscribed(
+            context,
+            q.from_user.id,
+            force=True
+        )
+
+        if not ok:
+
+            return await show(
+                q,
+                SUB_TEXT,
+                sub_markup()
+            )
+
+        return await show(
+            q,
+            "✅ تم التحقق من الاشتراك.\n"
+            "أهلاً بيك، اختر من القائمة:",
+            main_menu(
+                q.from_user.id
+            )
+        )
+
+    # =====================================================
+    # الملخصات
+    # =====================================================
+
+    if data == "sm":
+
+        return await show(
+            q,
+            "📄 اختر المادة:",
+            subjects_markup(
+                "ss",
+                "summaries_count",
+                "m"
+            )
+        )
+
+    if data.startswith("ss:"):
+
+        try:
+            sid = int(
+                data.split(
+                    ":",
+                    1
+                )[1]
+            )
+        except ValueError:
+            return
+
+        return await summaries_list(
+            q,
+            sid
+        )
+
+    if data.startswith("sd:"):
+
+        try:
+            sum_id = int(
+                data.split(
+                    ":",
+                    1
+                )[1]
+            )
+        except ValueError:
+            return
+
+        return await send_summary(
+            q,
+            sum_id
+        )
+
+    # =====================================================
+    # الاختبارات
+    # =====================================================
+
+    if data == "qm":
+
+        return await show(
+            q,
+            "📝 اختر المادة:",
+            subjects_markup(
+                "qsub",
+                "questions_count",
+                "m"
+            )
+        )
+
+    if data.startswith("qsub:"):
+
+        try:
+            sid = int(
+                data.split(
+                    ":",
+                    1
+                )[1]
+            )
+        except ValueError:
+            return
+
+        return await quiz.show_subject_quiz(
+            q,
+            q.from_user.id,
+            sid
+        )
+
+    if data.startswith("qs:"):
+
+        try:
+            sid = int(
+                data.split(
+                    ":",
+                    1
+                )[1]
+            )
+        except ValueError:
+            return
+
+        return await quiz.start_quiz(
+            q,
+            context,
+            sid
+        )
+
+    if data.startswith("a:"):
+
+        arg = data.split(
+            ":",
+            1
+        )[1]
+
+        return await quiz_flow.answer(
+            q,
+            context,
+            arg
+        )
+
+    if data == "n":
+
+        return await quiz_flow.next_question(
+            q,
+            context
+        )
+
+    if data == "rw":
+
+        return await quiz.retry_wrong(
+            q,
+            context
+        )
+
+    # =====================================================
+    # النتائج
+    # =====================================================
+
+    if data == "me":
+
+        return await quiz.show_stats(
+            q,
+            q.from_user.id
+        )
+
+    # =====================================================
+    # الجدول الأسبوعي
+    # =====================================================
+
+    if data == "sc":
+
+        return await timetable.open_menu(
+            q,
+            q.from_user.id
+        )
+
+    if data.startswith("scset:"):
+
+        section = data.split(
+            ":",
+            1
+        )[1]
+
+        return await timetable.set_section(
+            q,
+            context,
+            section
+        )
+
+    if data == "scchg":
+
+        return await timetable.change_section(
+            q
+        )
+
+    if data.startswith("scday:"):
+
+        day = data.split(
+            ":",
+            1
+        )[1]
+
+        return await timetable.show_day(
+            q,
+            q.from_user.id,
+            day
+        )
+
+    # =====================================================
+    # التواصل
+    # =====================================================
+
+    if data == "ct":
+
+        return await reports.show_contact(
+            q
+        )
+
+    # =====================================================
+    # التقارير
+    # =====================================================
+
+    if data == "rp":
+
+        return await reports.show_report_info(
+            q
+        )
+
+    if data == "rp1":
+
+        return await reports.ask_report(
+            q,
+            context
+        )
+
+    # =====================================================
+    # الأدمن
+    # =====================================================
+
+    if data == "ad":
+
+        if not is_admin(
+            q.from_user.id
+        ):
+            return
+
+        return await show(
+            q,
+            "⚙️ لوحة الأدمن:",
+            admin.panel_markup()
+        )
+
+    if data.startswith("ap:"):
+
+        if not is_admin(
+            q.from_user.id
+        ):
+            return
+
+        arg = data.split(
+            ":",
+            1
+        )[1]
+
+        return await admin.router(
+            q,
+            context,
+            "ap",
+            arg
+        )
+
+    if data.startswith("ak:"):
+
+        if
