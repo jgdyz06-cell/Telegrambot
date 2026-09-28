@@ -95,4 +95,104 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "chk":
         if await is_subscribed(context, uid, force=True):
             await q.answer()
-            return await show(q, "أهلاً بيك 👋\nاختر من القائمة:", main_menu(uid
+            return await show(q, "أهلاً بيك 👋\nاختر من القائمة:", main_menu(uid))
+        return await q.answer("لسا ما اشتركت بالقناة ❌", show_alert=True)
+
+    if not await is_subscribed(context, uid):
+        await q.answer()
+        return await show(q, SUB_TEXT, sub_markup())
+
+    if action == "a":
+        return await quiz_flow.answer(q, context, arg)
+
+    await q.answer()
+
+    if action in admin.ACTIONS:
+        if not is_admin(uid):
+            return await q.message.reply_text("هذا للأدمن فقط.")
+        return await admin.router(q, context, action, arg)
+
+    if action == "m":
+        context.user_data.pop("await", None)
+        await show(q, "اختر من القائمة:", main_menu(uid))
+    elif action == "sm":
+        await show(q, "📄 اختر المادة (الملخصات):", subjects_markup("s", "s_count"))
+    elif action == "s":
+        await summaries_list(q, int(arg))
+    elif action == "sd":
+        await send_summary(q, int(arg))
+    elif action == "qm":
+        await show(q, "📝 اختر المادة (الاختبارات):", subjects_markup("q", "q_count"))
+    elif action == "q":
+        await quiz.show_subject_quiz(q, uid, int(arg))
+    elif action == "qs":
+        await quiz.start_quiz(q, context, int(arg))
+    elif action == "rw":
+        await quiz.retry_wrong(q, context)
+    elif action == "n":
+        await quiz_flow.next_question(q, context)
+    elif action == "me":
+        await quiz.show_stats(q, uid)
+    elif action == "ct":
+        await reports.show_contact(q)
+    elif action == "rp":
+        await reports.show_report_info(q)
+    elif action == "rp1":
+        await reports.ask_report(q, context)
+    elif action == "sc":
+        await timetable.open_menu(q, uid)
+    elif action == "scset":
+        await timetable.set_section(q, context, arg)
+    elif action == "scday":
+        await timetable.show_day(q, uid, arg)
+    elif action == "scchg":
+        await timetable.change_section(q)
+
+
+async def on_error(update, context: ContextTypes.DEFAULT_TYPE):
+    logger.error("Unhandled error", exc_info=context.error)
+
+
+def main():
+    if not BOT_TOKEN:
+        raise SystemExit("❌ حط التوكن في متغير البيئة BOT_TOKEN (شوف README.md)")
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .post_init(backup.startup)
+        .post_stop(backup.shutdown)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .write_timeout(30)
+        .pool_timeout(30)
+        .get_updates_connect_timeout(30)
+        .get_updates_read_timeout(30)
+        .get_updates_write_timeout(30)
+        .get_updates_pool_timeout(30)
+        .build()
+    )
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("myid", myid))
+    app.add_handler(CommandHandler("admin", admin_cmd))
+    app.add_handler(CommandHandler("cancel", cancel))
+    app.add_handler(CommandHandler("content", content_cmd))
+    app.add_handler(CommandHandler("backup", backup_cmd))
+    app.add_handler(CallbackQueryHandler(on_button))
+    app.add_handler(
+        MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.Document.ALL, on_message)
+    )
+    app.add_error_handler(on_error)
+
+    from zoneinfo import ZoneInfo
+    app.job_queue.run_daily(
+        timetable.send_daily_reminders,
+        time=dt.time(21, 0, tzinfo=ZoneInfo("Asia/Baghdad")),
+        name="daily_schedule_reminder",
+    )
+
+    print("✅ البوت شغال... اضغط Ctrl+C للإيقاف")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
