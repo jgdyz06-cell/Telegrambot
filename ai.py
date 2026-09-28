@@ -1,7 +1,7 @@
 # ai.py
 # ============================================================
 # Gemini AI - Telegram Bot
-# Fast / Low Latency Version
+# Stable Timeout + Fallback Version
 # ============================================================
 
 import os
@@ -28,13 +28,11 @@ GEMINI_API_KEY = os.getenv(
     ""
 ).strip()
 
-# الموديل السريع الأساسي
 GEMINI_MODEL = os.getenv(
     "GEMINI_MODEL",
     "gemini-3.5-flash-lite"
 ).strip()
 
-# الاحتياطي إذا الأساسي رجع 503
 FALLBACK_MODELS = [
     "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
@@ -53,11 +51,20 @@ if GEMINI_API_KEY:
 
         client = genai.Client(
             api_key=GEMINI_API_KEY,
+
             http_options=types.HttpOptions(
+
+                # نرفع المهلة من 30 إلى 60 ثانية
+                timeout=60000,
+
+                # لا نريد SDK يعيد الطلب عدة مرات
+                # حتى لا يتأخر البوت
                 retry_options=types.HttpRetryOptions(
                     attempts=1
                 ),
-                timeout=30000
+
+                # استخدام API المستقر
+                api_version="v1"
             )
         )
 
@@ -97,14 +104,13 @@ SYSTEM_PROMPT = """
 - اعتمد على النص المرسل.
 - نظم الإجابة بعناوين ونقاط.
 - لا تكرر السؤال.
-- أعطِ النتيجة مباشرة.
+- أعط النتيجة مباشرة.
 
 في الإعراب:
 اذكر إعراب الكلمات المهمة وعلامة الإعراب وسببها.
 
 في البلاغة:
 حدد التشبيه والاستعارة والكناية والمجاز والمحسنات إن وجدت.
-لا تذكر فناً بلاغياً بدون دليل.
 
 في الصرف:
 اذكر الجذر والوزن والنوع والمجرد والمزيد عند الحاجة.
@@ -155,7 +161,7 @@ PROMPTS = {
 4. المجاز.
 5. الطباق والمقابلة.
 6. الجناس والسجع إن وجدا.
-7. أثر الأساليب البلاغية في المعنى.
+7. أثر الأساليب البلاغية.
 
 النص:
 """,
@@ -209,7 +215,7 @@ PROMPTS = {
 1. البحر الشعري المحتمل.
 2. التفعيلات.
 3. التقطيع العروضي.
-4. استخدام / للمتحرك و o للساكن.
+4. استخدم / للمتحرك و o للساكن.
 5. القافية.
 6. الروي.
 7. الوصل والخروج إن أمكن.
@@ -242,7 +248,7 @@ PROMPTS = {
 
 
 # ============================================================
-# Check Configuration
+# Configuration Check
 # ============================================================
 
 def check_gemini_config():
@@ -268,22 +274,25 @@ def check_gemini_config():
 
 
 # ============================================================
-# Detect 503
+# Temporary Error Check
 # ============================================================
 
-def is_503_error(error):
+def is_temporary_error(error):
 
     text = str(error).upper()
 
     return (
         "503" in text
         or "UNAVAILABLE" in text
-        or "SERVICE UNAVAILABLE" in text
+        or "504" in text
+        or "DEADLINE_EXCEEDED" in text
+        or "DEADLINE EXCEEDED" in text
+        or "TIMEOUT" in text
     )
 
 
 # ============================================================
-# Generate
+# Generate With Model
 # ============================================================
 
 def _generate_with_model(
@@ -316,7 +325,7 @@ def _generate_with_model(
 
         config=types.GenerateContentConfig(
 
-            max_output_tokens=2500
+            max_output_tokens=2000
         )
     )
 
@@ -361,7 +370,6 @@ def _generate(prompt):
 
     last_error = None
 
-    # تجربة الموديلات بدون انتظار طويل
     for model in FALLBACK_MODELS:
 
         try:
@@ -375,12 +383,13 @@ def _generate(prompt):
 
             last_error = error
 
-            if is_503_error(error):
+            if is_temporary_error(error):
 
                 logger.warning(
-                    "Model %s returned 503. "
+                    "Gemini model %s temporary error: %s. "
                     "Trying next model.",
-                    model
+                    model,
+                    error
                 )
 
                 continue
@@ -394,7 +403,7 @@ def _generate(prompt):
             ) from error
 
     raise RuntimeError(
-        "Gemini مشغول حالياً وأعاد 503."
+        "Gemini لم يكمل الطلب ضمن المهلة."
     ) from last_error
 
 
@@ -407,20 +416,12 @@ async def ask_ai(
     text
 ):
 
-    # --------------------------------------------------------
-    # التأكد من وجود النص
-    # --------------------------------------------------------
-
     if not text or not text.strip():
 
         return (
             "❌ ما وصلني نص للتحليل.\n\n"
             "أرسل النص أولاً ثم اختر نوع التحليل."
         )
-
-    # --------------------------------------------------------
-    # فحص Gemini
-    # --------------------------------------------------------
 
     ok, message = check_gemini_config()
 
@@ -436,27 +437,15 @@ async def ask_ai(
             + message
         )
 
-    # --------------------------------------------------------
-    # نوع التحليل
-    # --------------------------------------------------------
-
     if mode not in PROMPTS:
 
         mode = "explain"
-
-    # --------------------------------------------------------
-    # بناء الطلب
-    # --------------------------------------------------------
 
     prompt = (
         PROMPTS[mode]
         + "\n\n"
         + text.strip()
     )
-
-    # --------------------------------------------------------
-    # إرسال الطلب
-    # --------------------------------------------------------
 
     try:
 
@@ -479,7 +468,23 @@ async def ask_ai(
             "AI request failed."
         )
 
-        if is_503_error(error):
+        error_text = str(error).upper()
+
+        if (
+            "504" in error_text
+            or "DEADLINE_EXCEEDED" in error_text
+            or "TIMEOUT" in error_text
+        ):
+
+            return (
+                "⏱️ Gemini تأخر بالاستجابة.\n\n"
+                "حاول مرة ثانية بعد قليل 🔄"
+            )
+
+        if (
+            "503" in error_text
+            or "UNAVAILABLE" in error_text
+        ):
 
             return (
                 "⚠️ Gemini مشغول حالياً.\n\n"
