@@ -38,12 +38,12 @@ def counts():
 
 
 def signature():
-    return tuple(
-        tuple(dbcore.sql_one(
-            f"SELECT COUNT(*) AS n, COALESCE(MAX(id), 0) AS m FROM {t}"
-        ).values())
-        for t in TABLES
-    )
+    p = dbcore.db_path()
+    try:
+        st = os.stat(p)
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
 
 
 def snapshot():
