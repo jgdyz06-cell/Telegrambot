@@ -27,7 +27,6 @@ def is_admin(uid):
 
 
 def back_markup(target, label="🔙 رجوع"):
-
     return Markup(
         [
             [
@@ -42,16 +41,13 @@ def back_markup(target, label="🔙 رجوع"):
 
 
 async def show(q, text, markup=None):
-
     try:
-
         await q.edit_message_text(
             text,
             reply_markup=markup
         )
 
     except BadRequest as e:
-
         if "not modified" not in str(e).lower():
             raise
 
@@ -94,7 +90,7 @@ def main_menu(uid):
             ),
         ],
 
-        # Web App
+        # واجهة قطوف الأكلم
         [
             Btn(
                 "🌐 فتح قطوف الأكلم",
@@ -123,7 +119,6 @@ def main_menu(uid):
     ]
 
     if is_admin(uid):
-
         rows.append(
             [
                 Btn(
@@ -281,4 +276,173 @@ async def summaries_list(q, sid):
 
         return await show(
             q,
-           
+            "⚠️ المادة غير موجودة.",
+            back_markup("sm"),
+        )
+
+    items = db.summaries(sid)
+
+    if not items:
+
+        return await show(
+            q,
+            f"⚠️ ما في ملخصات مضافة بعد لمادة {subj['name']}.",
+            back_markup("sm"),
+        )
+
+    rows = [
+        [
+            Btn(
+                f"📄 {it['title']}",
+                callback_data=f"sd:{it['id']}",
+                style="primary",
+            )
+        ]
+        for it in items
+    ]
+
+    rows.append(
+        [
+            Btn(
+                "🔙 رجوع للمواد",
+                callback_data="sm",
+                style="primary",
+            )
+        ]
+    )
+
+    await show(
+        q,
+        f"📄 ملخصات {subj['name']}:",
+        Markup(rows),
+    )
+
+
+# ============================================================
+# إرسال الملخص
+# ============================================================
+
+async def send_summary(q, sum_id):
+
+    it = db.get_summary(sum_id)
+
+    if not it:
+
+        return await q.message.reply_text(
+            "⚠️ هذا الملخص انحذف."
+        )
+
+    if it["file_id"]:
+
+        await q.message.reply_document(
+            it["file_id"],
+            caption=f"📄 {it['title']}"
+        )
+
+    else:
+
+        await q.message.reply_text(
+            f"📄 {it['title']}\n{it['url']}"
+        )
+
+
+# ============================================================
+# الاشتراك الإجباري
+# ============================================================
+
+SUB_TEXT = (
+    "⚠️ لازم تشترك بالقناة أول عشان تستخدم البوت:\n"
+    f"{CHANNEL_URL}\n\n"
+    "بعد ما تشترك اضغط «اشتركت، تحقق»."
+)
+
+
+def sub_markup():
+
+    return Markup(
+        [
+
+            [
+                Btn(
+                    "📢 اشترك بالقناة",
+                    url=CHANNEL_URL,
+                    style="primary",
+                )
+            ],
+
+            [
+                Btn(
+                    "✅ اشتركت، تحقق",
+                    callback_data="chk",
+                    style="success",
+                )
+            ],
+
+        ]
+    )
+
+
+# ============================================================
+# التحقق من الاشتراك
+# ============================================================
+
+async def is_subscribed(
+    context,
+    uid,
+    force=False
+):
+
+    if not CHANNEL or is_admin(uid):
+        return True
+
+    now = time.time()
+
+    if (
+        not force
+        and context.user_data.get(
+            "sub_until",
+            0
+        ) > now
+    ):
+        return True
+
+    try:
+
+        m = await context.bot.get_chat_member(
+            CHANNEL,
+            uid
+        )
+
+    except Exception:
+
+        logger.exception(
+            "ما قدرت أتحقق من الاشتراك. "
+            "تأكد إن البوت أدمن بالقناة %s",
+            CHANNEL
+        )
+
+        return True
+
+    ok = (
+        m.status in (
+            "member",
+            "administrator",
+            "creator"
+        )
+        or (
+            m.status == "restricted"
+            and getattr(
+                m,
+                "is_member",
+                False
+            )
+        )
+    )
+
+    if ok:
+
+        context.user_data["sub_until"] = (
+            now + 600
+        )
+
+    return ok
