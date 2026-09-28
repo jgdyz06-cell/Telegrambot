@@ -1,13 +1,24 @@
 # -*- coding: utf-8 -*-
+
 """القوائم المشتركة + الاشتراك الإجباري."""
+
 import time
 
 from telegram import InlineKeyboardButton as Btn
 from telegram import InlineKeyboardMarkup as Markup
+
 from telegram.error import BadRequest
 
 import db
-from config import ADMIN_IDS, CHANNEL, CHANNEL_URL, OWNER_TG, OWNER_WA, logger
+
+from config import (
+    ADMIN_IDS,
+    CHANNEL,
+    CHANNEL_URL,
+    OWNER_TG,
+    OWNER_WA,
+    logger,
+)
 
 
 def is_admin(uid):
@@ -15,73 +26,281 @@ def is_admin(uid):
 
 
 def back_markup(target, label="🔙 رجوع"):
-    return Markup([[Btn(label, callback_data=target)]])
+    return Markup(
+        [
+            [
+                Btn(
+                    label,
+                    callback_data=target
+                )
+            ]
+        ]
+    )
 
 
 async def show(q, text, markup=None):
+
     try:
-        await q.edit_message_text(text, reply_markup=markup)
+
+        await q.edit_message_text(
+            text,
+            reply_markup=markup
+        )
+
     except BadRequest as e:
+
         if "not modified" not in str(e).lower():
             raise
 
 
 def main_menu(uid):
+
     rows = [
-        [Btn("📄 الملخصات", callback_data="sm")],
-        [Btn("📝 الاختبارات", callback_data="qm")],
-        [Btn("📊 نتائجي", callback_data="me")],
-        [Btn("📅 الجدول الأسبوعي", callback_data="sc")],
-        [Btn("📑 طلب تقرير", callback_data="rp")],
-        [Btn("📞 تواصل معنا", callback_data="ct")],
+
+        [
+            Btn(
+                "📄 الملخصات",
+                callback_data="sm"
+            )
+        ],
+
+        [
+            Btn(
+                "📝 الاختبارات",
+                callback_data="qm"
+            )
+        ],
+
+        [
+            Btn(
+                "📊 نتائجي",
+                callback_data="me"
+            )
+        ],
+
+        [
+            Btn(
+                "📅 الجدول الأسبوعي",
+                callback_data="sc"
+            )
+        ],
+
+        [
+            Btn(
+                "📑 طلب تقرير",
+                callback_data="rp"
+            )
+        ],
+
+        [
+            Btn(
+                "📞 تواصل معنا",
+                callback_data="ct"
+            )
+        ],
+
     ]
+
     if is_admin(uid):
-        rows.append([Btn("⚙️ لوحة الأدمن", callback_data="ad")])
+
+        rows.append(
+            [
+                Btn(
+                    "⚙️ لوحة الأدمن",
+                    callback_data="ad"
+                )
+            ]
+        )
+
+    return Markup(rows)
+
+
+def ai_markup():
+
+    rows = [
+
+        [
+            Btn(
+                "📌 إعراب مفصل",
+                callback_data="ai:grammar"
+            ),
+
+            Btn(
+                "🎨 تحليل بلاغي",
+                callback_data="ai:rhetoric"
+            ),
+        ],
+
+        [
+            Btn(
+                "⚖️ الصرف والبنية",
+                callback_data="ai:morphology"
+            ),
+
+            Btn(
+                "📖 معجم المفردات",
+                callback_data="ai:dictionary"
+            ),
+        ],
+
+        [
+            Btn(
+                "📝 شرح النص",
+                callback_data="ai:explain"
+            ),
+
+            Btn(
+                "🪶 عروض وقافية",
+                callback_data="ai:prosody"
+            ),
+        ],
+
+        [
+            Btn(
+                "👤 الشاعر والعصر",
+                callback_data="ai:poet"
+            ),
+        ],
+
+    ]
+
     return Markup(rows)
 
 
 def subjects_markup(prefix, count_key=None, back="m"):
+
     buttons = []
+
     for s in db.subjects_with_counts():
-        label = f"{s['name']} ({s[count_key]})" if count_key else s["name"]
-        buttons.append(Btn(label, callback_data=f"{prefix}:{s['id']}"))
-    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([Btn("🔙 رجوع", callback_data=back)])
+
+        label = (
+            f"{s['name']} ({s[count_key]})"
+            if count_key
+            else s["name"]
+        )
+
+        buttons.append(
+            Btn(
+                label,
+                callback_data=f"{prefix}:{s['id']}"
+            )
+        )
+
+    rows = [
+        buttons[i:i + 2]
+        for i in range(0, len(buttons), 2)
+    ]
+
+    rows.append(
+        [
+            Btn(
+                "🔙 رجوع",
+                callback_data=back
+            )
+        ]
+    )
+
     return Markup(rows)
 
 
 def contact_buttons():
+
     return [
-        [Btn("✈️ تلقرام", url=f"https://t.me/{OWNER_TG}")],
-        [Btn("🟢 واتساب", url=f"https://wa.me/{OWNER_WA}")],
+
+        [
+            Btn(
+                "✈️ تلقرام",
+                url=f"https://t.me/{OWNER_TG}"
+            )
+        ],
+
+        [
+            Btn(
+                "🟢 واتساب",
+                url=f"https://wa.me/{OWNER_WA}"
+            )
+        ],
+
     ]
 
 
 async def summaries_list(q, sid):
+
     subj = db.get_subject(sid)
+
     if not subj:
-        return await show(q, "⚠️ المادة غير موجودة.", back_markup("sm"))
-    items = db.summaries(sid)
-    if not items:
+
         return await show(
-            q, f"⚠️ ما في ملخصات مضافة بعد لمادة {subj['name']}.", back_markup("sm")
+            q,
+            "⚠️ المادة غير موجودة.",
+            back_markup("sm")
         )
-    rows = [[Btn(f"📄 {it['title']}", callback_data=f"sd:{it['id']}")] for it in items]
-    rows.append([Btn("🔙 رجوع للمواد", callback_data="sm")])
-    await show(q, f"📄 ملخصات {subj['name']}:", Markup(rows))
+
+    items = db.summaries(sid)
+
+    if not items:
+
+        return await show(
+            q,
+            f"⚠️ ما في ملخصات مضافة بعد لمادة {subj['name']}.",
+            back_markup("sm")
+        )
+
+    rows = [
+
+        [
+            Btn(
+                f"📄 {it['title']}",
+                callback_data=f"sd:{it['id']}"
+            )
+        ]
+
+        for it in items
+
+    ]
+
+    rows.append(
+        [
+            Btn(
+                "🔙 رجوع للمواد",
+                callback_data="sm"
+            )
+        ]
+    )
+
+    await show(
+        q,
+        f"📄 ملخصات {subj['name']}:",
+        Markup(rows)
+    )
 
 
 async def send_summary(q, sum_id):
+
     it = db.get_summary(sum_id)
+
     if not it:
-        return await q.message.reply_text("⚠️ هذا الملخص انحذف.")
+
+        return await q.message.reply_text(
+            "⚠️ هذا الملخص انحذف."
+        )
+
     if it["file_id"]:
-        await q.message.reply_document(it["file_id"], caption=f"📄 {it['title']}")
+
+        await q.message.reply_document(
+            it["file_id"],
+            caption=f"📄 {it['title']}"
+        )
+
     else:
-        await q.message.reply_text(f"📄 {it['title']}\n{it['url']}")
+
+        await q.message.reply_text(
+            f"📄 {it['title']}\n{it['url']}"
+        )
 
 
 # ---------- الاشتراك الإجباري ----------
+
 SUB_TEXT = (
     "⚠️ لازم تشترك بالقناة أول عشان تستخدم البوت:\n"
     f"{CHANNEL_URL}\n\n"
@@ -90,29 +309,87 @@ SUB_TEXT = (
 
 
 def sub_markup():
+
     return Markup(
         [
-            [Btn("📢 اشترك بالقناة", url=CHANNEL_URL)],
-            [Btn("✅ اشتركت، تحقق", callback_data="chk")],
+
+            [
+                Btn(
+                    "📢 اشترك بالقناة",
+                    url=CHANNEL_URL
+                )
+            ],
+
+            [
+                Btn(
+                    "✅ اشتركت، تحقق",
+                    callback_data="chk"
+                )
+            ],
+
         ]
     )
 
 
-async def is_subscribed(context, uid, force=False):
+async def is_subscribed(
+    context,
+    uid,
+    force=False
+):
+
     if not CHANNEL or is_admin(uid):
+
         return True
+
     now = time.time()
-    if not force and context.user_data.get("sub_until", 0) > now:
+
+    if (
+        not force
+        and context.user_data.get(
+            "sub_until",
+            0
+        ) > now
+    ):
+
         return True
+
     try:
-        m = await context.bot.get_chat_member(CHANNEL, uid)
+
+        m = await context.bot.get_chat_member(
+            CHANNEL,
+            uid
+        )
+
     except Exception:
-        # غالباً البوت مو أدمن بالقناة. نسمح للطالب عشان ما ينقفل الكل.
-        logger.exception("ما قدرت أتحقق من الاشتراك. تأكد إن البوت أدمن بالقناة %s", CHANNEL)
+
+        logger.exception(
+            "ما قدرت أتحقق من الاشتراك. "
+            "تأكد إن البوت أدمن بالقناة %s",
+            CHANNEL
+        )
+
         return True
-    ok = m.status in ("member", "administrator", "creator") or (
-        m.status == "restricted" and getattr(m, "is_member", False)
+
+    ok = (
+        m.status in (
+            "member",
+            "administrator",
+            "creator"
+        )
+        or (
+            m.status == "restricted"
+            and getattr(
+                m,
+                "is_member",
+                False
+            )
+        )
     )
+
     if ok:
-        context.user_data["sub_until"] = now + 600  # نخزّن النتيجة 10 دقايق
+
+        context.user_data["sub_until"] = (
+            now + 600
+        )
+
     return ok
