@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Gemini AI integration for Telegram bot."""
+# ai.py
+# Gemini AI integration for Telegram bot
 
 import os
 import asyncio
@@ -13,15 +14,23 @@ from google.genai import types
 # إعدادات Gemini
 # =========================================================
 
-GEMINI_API_KEY = os.getenv(
-    "GEMINI_API_KEY",
-    ""
-).strip()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
+# الموديل الأساسي
 GEMINI_MODEL = os.getenv(
     "GEMINI_MODEL",
     "gemini-3.8-flash"
 ).strip()
+
+
+# الموديلات البديلة إذا صار 503
+FALLBACK_MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+]
 
 
 # =========================================================
@@ -32,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 # =========================================================
-# التعليمات الأساسية
+# التعليمات الأساسية للذكاء الاصطناعي
 # =========================================================
 
 SYSTEM_PROMPT = """
@@ -200,10 +209,13 @@ PROMPTS = {
 
 
 # =========================================================
-# فحص الإعدادات
+# التحقق من الإعدادات
 # =========================================================
 
 def check_gemini_config():
+    """
+    فحص إعدادات Gemini بدون إظهار مفتاح API.
+    """
 
     if not GEMINI_API_KEY:
         raise RuntimeError(
@@ -217,76 +229,193 @@ def check_gemini_config():
 
 
 # =========================================================
-# الاتصال بـ Gemini
+# تحديد هل الخطأ 503 أم لا
+# =========================================================
+
+def is_503_error(error: Exception) -> bool:
+    """
+    نتحقق هل الخطأ بسبب عدم توفر الموديل مؤقتاً.
+    """
+
+    error_text = str(error).upper()
+
+    return (
+        "503" in error_text
+        or "UNAVAILABLE" in error_text
+        or "SERVICE UNAVAILABLE" in error_text
+    )
+
+
+# =========================================================
+# الاتصال بموديل واحد
+# =========================================================
+
+def _generate_with_model(
+    client,
+    model: str,
+    full_prompt: str
+) -> str:
+
+    logger.info(
+        "Trying Gemini model: %s",
+        model
+    )
+
+    response = client.models.generate_content(
+        model=model,
+        contents=full_prompt,
+        config=types.GenerateContentConfig(
+            max_output_tokens=3000,
+        ),
+    )
+
+    if response is None:
+        raise RuntimeError(
+            "Gemini أعاد استجابة فارغة."
+        )
+
+    text = getattr(response, "text", None)
+
+    if not text:
+        raise RuntimeError(
+            "Gemini لم يُرجع نصاً في الاستجابة."
+        )
+
+    return text.strip()
+
+
+# =========================================================
+# إرسال الطلب إلى Gemini
 # =========================================================
 
 def _generate(prompt: str) -> str:
+    """
+    إرسال الطلب إلى Gemini.
+
+    إذا فشل الموديل الأساسي بسبب 503،
+    يجرب موديلات بديلة تلقائياً.
+    """
 
     check_gemini_config()
 
-    try:
+    client = genai.Client(
+        api_key=GEMINI_API_KEY
+    )
 
-        client = genai.Client(
-            api_key=GEMINI_API_KEY
-        )
-
-        full_prompt = f"""
+    full_prompt = f"""
 {SYSTEM_PROMPT}
 
 المطلوب:
 {prompt}
 """
 
-        # Gemini 3.8 Flash
-        # لا نرسل temperature / top_p / top_k
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=full_prompt,
-            config=types.GenerateContentConfig(
-                max_output_tokens=3000,
-            ),
-        )
+    # -----------------------------------------------------
+    # ترتيب الموديلات
+    # -----------------------------------------------------
 
-        if response is None:
-            raise RuntimeError(
-                "Gemini أعاد استجابة فارغة."
+    models_to_try = []
+
+    # أولاً الموديل الموجود في Railway
+    if GEMINI_MODEL:
+        models_to_try.append(GEMINI_MODEL)
+
+    # ثم الموديلات البديلة
+    for model in FALLBACK_MODELS:
+        if model not in models_to_try:
+            models_to_try.append(model)
+
+    last_error = None
+
+    # -----------------------------------------------------
+    # تجربة الموديلات
+    # -----------------------------------------------------
+
+    for model in models_to_try:
+
+        try:
+
+            result = _generate_with_model(
+                client,
+                model,
+                full_prompt
             )
 
-        text = getattr(
-            response,
-            "text",
-            None,
-        )
-
-        if not text:
-            raise RuntimeError(
-                "Gemini لم يُرجع نصاً في الاستجابة."
+            logger.info(
+                "Gemini succeeded using model: %s",
+                model
             )
 
-        return text.strip()
+            return result
 
-    except Exception as e:
+        except Exception as e:
 
-        logger.exception(
-            "Gemini API Error: %s: %s",
-            type(e).__name__,
-            str(e),
-        )
+            last_error = e
+
+            logger.exception(
+                "Gemini model failed: %s | %s: %s",
+                model,
+                type(e).__name__,
+                str(e)
+            )
+
+            # إذا كان الخطأ 503:
+            # ننتقل للموديل التالي.
+            if is_503_error(e):
+
+                logger.warning(
+                    "Model %s returned 503. "
+                    "Trying next fallback model.",
+                    model
+                )
+
+                continue
+
+            # إذا كان الخطأ ليس 503،
+            # لا نجرّب موديلات عشوائياً.
+            raise RuntimeError(
+                f"Gemini API Error: "
+                f"{type(e).__name__}: {e}"
+            ) from e
+
+    # -----------------------------------------------------
+    # كل الموديلات فشلت
+    # -----------------------------------------------------
+
+    if last_error is not None:
 
         raise RuntimeError(
-            f"Gemini API Error: "
-            f"{type(e).__name__}: {e}"
-        ) from e
+            "جميع موديلات Gemini المتاحة أعادت "
+            "503 UNAVAILABLE حالياً. "
+            "حاول مرة أخرى بعد قليل."
+        ) from last_error
+
+    raise RuntimeError(
+        "لم يتم العثور على موديل صالح."
+    )
 
 
 # =========================================================
-# الدالة الرئيسية
+# الدالة الرئيسية التي يستخدمها bot.py
 # =========================================================
 
 async def ask_ai(
     mode: str,
-    text: str,
+    text: str
 ) -> str:
+
+    """
+    mode:
+        grammar
+        rhetoric
+        morphology
+        dictionary
+        explain
+        prosody
+        poet
+
+    text:
+        النص الذي يريد المستخدم تحليله.
+    """
 
     if not text or not text.strip():
         return "❌ ماكو نص حتى أحلله."
@@ -304,7 +433,7 @@ async def ask_ai(
 
         result = await asyncio.to_thread(
             _generate,
-            prompt,
+            prompt
         )
 
         return result
@@ -314,20 +443,25 @@ async def ask_ai(
         logger.exception(
             "ask_ai failed: %s: %s",
             type(e).__name__,
-            str(e),
+            str(e)
         )
 
         return (
             "❌ صار خطأ أثناء الاتصال بـ Gemini.\n\n"
-            f"نوع الخطأ: {type(e).__name__}"
+            f"نوع الخطأ: {type(e).__name__}\n\n"
+            "إذا كان السبب 503، فالموديل مشغول حالياً "
+            "وسيحاول البوت استخدام موديل بديل تلقائياً."
         )
 
 
 # =========================================================
-# اختبار Gemini
+# دالة اختبار اختيارية
 # =========================================================
 
 async def test_ai() -> str:
+    """
+    اختبار بسيط للاتصال بـ Gemini.
+    """
 
     try:
 
