@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import datetime as dt
+
 from telegram import Update
 from telegram.ext import (
     Application, CallbackQueryHandler, CommandHandler,
@@ -13,6 +15,7 @@ import quiz
 import quiz_flow
 import reports
 import seed
+import timetable
 from config import BOT_TOKEN, logger
 from ui import (
     SUB_TEXT, is_admin, is_subscribed, main_menu, send_summary, show,
@@ -23,6 +26,7 @@ from ui import (
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("quiz", None)
     context.user_data.pop("await", None)
+    db.upsert_user(update.effective_user.id, update.effective_user.full_name)
     if not await is_subscribed(context, update.effective_user.id):
         return await update.message.reply_text(SUB_TEXT, reply_markup=sub_markup())
     await update.message.reply_text(
@@ -135,44 +139,11 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reports.show_report_info(q)
     elif action == "rp1":
         await reports.ask_report(q, context)
-
-
-async def on_error(update, context: ContextTypes.DEFAULT_TYPE):
-    logger.error("Unhandled error", exc_info=context.error)
-
-
-def main():
-    if not BOT_TOKEN:
-        raise SystemExit("❌ حط التوكن في متغير البيئة BOT_TOKEN (شوف README.md)")
-    app = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .post_init(backup.startup)
-        .post_stop(backup.shutdown)
-        .connect_timeout(30)
-        .read_timeout(30)
-        .write_timeout(30)
-        .pool_timeout(30)
-        .get_updates_connect_timeout(30)
-        .get_updates_read_timeout(30)
-        .get_updates_write_timeout(30)
-        .get_updates_pool_timeout(30)
-        .build()
-    )
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("myid", myid))
-    app.add_handler(CommandHandler("admin", admin_cmd))
-    app.add_handler(CommandHandler("cancel", cancel))
-    app.add_handler(CommandHandler("content", content_cmd))
-    app.add_handler(CommandHandler("backup", backup_cmd))
-    app.add_handler(CallbackQueryHandler(on_button))
-    app.add_handler(
-        MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.Document.ALL, on_message)
-    )
-    app.add_error_handler(on_error)
-    print("✅ البوت شغال... اضغط Ctrl+C للإيقاف")
-    app.run_polling()
-
-
-if __name__ == "__main__":
-    main()
+    elif action == "sc":
+        await timetable.open_menu(q, uid)
+    elif action == "scset":
+        await timetable.set_section(q, context, arg)
+    elif action == "scday":
+        await timetable.show_day(q, uid, arg)
+    elif action == "scchg":
+        aw
