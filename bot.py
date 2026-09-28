@@ -727,14 +727,19 @@ async def verify_subscription(
 # ============================================================
 
 async def show_main_menu(
-    q,
+    update,
     context,
 ):
+
+    q = update.callback_query
+
+    if not q:
+        return
 
     await safe_answer(q)
 
     if not await check_access(
-        q,
+        update,
         context,
     ):
         return
@@ -757,15 +762,20 @@ async def show_main_menu(
 # ============================================================
 
 async def handle_ai(
-    q,
+    update,
     context,
     mode,
 ):
 
+    q = update.callback_query
+
+    if not q:
+        return
+
     await safe_answer(q)
 
     if not await check_access(
-        q,
+        update,
         context,
     ):
         return
@@ -980,7 +990,7 @@ async def callback_router(
         )[1]
 
         return await handle_ai(
-            q,
+            update,
             context,
             mode,
         )
@@ -994,7 +1004,7 @@ async def callback_router(
     if data == "m":
 
         return await show_main_menu(
-            q,
+            update,
             context,
         )
 
