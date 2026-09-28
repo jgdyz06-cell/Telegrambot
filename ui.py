@@ -64,61 +64,60 @@ def main_menu(uid):
 
     rows = [
 
+        # الملخصات + الاختبارات
         [
             Btn(
                 "📄 الملخصات",
                 callback_data="sm",
                 style="primary",
-            )
-        ],
+            ),
 
-        [
             Btn(
                 "📝 الاختبارات",
                 callback_data="qm",
                 style="success",
-            )
+            ),
         ],
 
+        # النتائج + الجدول
         [
             Btn(
                 "📊 نتائجي",
                 callback_data="me",
                 style="primary",
-            )
-        ],
+            ),
 
-        [
             Btn(
                 "📅 الجدول الأسبوعي",
                 callback_data="sc",
                 style="primary",
-            )
+            ),
         ],
 
+        # Web App
         [
             Btn(
                 "🌐 فتح قطوف الأكلم",
                 web_app=WebAppInfo(
                     url="https://telegrambot-production-4013.up.railway.app"
                 ),
+                style="primary",
             )
         ],
 
+        # التقرير + التواصل
         [
             Btn(
                 "📑 طلب تقرير",
                 callback_data="rp",
                 style="success",
-            )
-        ],
+            ),
 
-        [
             Btn(
                 "📞 تواصل معنا",
                 callback_data="ct",
                 style="primary",
-            )
+            ),
         ],
 
     ]
@@ -282,178 +281,4 @@ async def summaries_list(q, sid):
 
         return await show(
             q,
-            "⚠️ المادة غير موجودة.",
-            back_markup("sm")
-        )
-
-    items = db.summaries(sid)
-
-    if not items:
-
-        return await show(
-            q,
-            f"⚠️ ما في ملخصات مضافة بعد لمادة {subj['name']}.",
-            back_markup("sm")
-        )
-
-    rows = [
-
-        [
-            Btn(
-                f"📄 {it['title']}",
-                callback_data=f"sd:{it['id']}",
-                style="primary",
-            )
-        ]
-
-        for it in items
-
-    ]
-
-    rows.append(
-        [
-            Btn(
-                "🔙 رجوع للمواد",
-                callback_data="sm",
-                style="primary",
-            )
-        ]
-    )
-
-    await show(
-        q,
-        f"📄 ملخصات {subj['name']}:",
-        Markup(rows)
-    )
-
-
-# ============================================================
-# إرسال الملخص
-# ============================================================
-
-async def send_summary(q, sum_id):
-
-    it = db.get_summary(sum_id)
-
-    if not it:
-
-        return await q.message.reply_text(
-            "⚠️ هذا الملخص انحذف."
-        )
-
-    if it["file_id"]:
-
-        await q.message.reply_document(
-            it["file_id"],
-            caption=f"📄 {it['title']}"
-        )
-
-    else:
-
-        await q.message.reply_text(
-            f"📄 {it['title']}\n{it['url']}"
-        )
-
-
-# ============================================================
-# الاشتراك الإجباري
-# ============================================================
-
-SUB_TEXT = (
-    "⚠️ لازم تشترك بالقناة أول عشان تستخدم البوت:\n"
-    f"{CHANNEL_URL}\n\n"
-    "بعد ما تشترك اضغط «اشتركت، تحقق»."
-)
-
-
-def sub_markup():
-
-    return Markup(
-        [
-
-            [
-                Btn(
-                    "📢 اشترك بالقناة",
-                    url=CHANNEL_URL,
-                    style="primary",
-                )
-            ],
-
-            [
-                Btn(
-                    "✅ اشتركت، تحقق",
-                    callback_data="chk",
-                    style="success",
-                )
-            ],
-
-        ]
-    )
-
-
-# ============================================================
-# التحقق من الاشتراك
-# ============================================================
-
-async def is_subscribed(
-    context,
-    uid,
-    force=False
-):
-
-    if not CHANNEL or is_admin(uid):
-
-        return True
-
-    now = time.time()
-
-    if (
-        not force
-        and context.user_data.get(
-            "sub_until",
-            0
-        ) > now
-    ):
-
-        return True
-
-    try:
-
-        m = await context.bot.get_chat_member(
-            CHANNEL,
-            uid
-        )
-
-    except Exception:
-
-        logger.exception(
-            "ما قدرت أتحقق من الاشتراك. "
-            "تأكد إن البوت أدمن بالقناة %s",
-            CHANNEL
-        )
-
-        return True
-
-    ok = (
-        m.status in (
-            "member",
-            "administrator",
-            "creator"
-        )
-        or (
-            m.status == "restricted"
-            and getattr(
-                m,
-                "is_member",
-                False
-            )
-        )
-    )
-
-    if ok:
-
-        context.user_data["sub_until"] = (
-            now + 600
-        )
-
-    return ok
+           
