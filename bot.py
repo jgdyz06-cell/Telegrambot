@@ -49,10 +49,8 @@ from ai import ask_ai
 
 try:
     from google import genai
-    from google.genai import types
 except Exception:
     genai = None
-    types = None
 
 
 GEMINI_API_KEY = os.getenv(
@@ -71,17 +69,9 @@ voice_client = None
 
 
 if GEMINI_API_KEY and genai is not None:
-
     try:
-
-        # مهم:
-        # لا نحدد api_version هنا.
-        # نخلي مكتبة Gemini تستخدم الإعداد المناسب.
         voice_client = genai.Client(
             api_key=GEMINI_API_KEY,
-            http_options=types.HttpOptions(
-                timeout=60000,
-            ),
         )
 
         logger.info(
@@ -90,7 +80,6 @@ if GEMINI_API_KEY and genai is not None:
         )
 
     except Exception:
-
         logger.exception(
             "Failed to initialize Gemini Voice client."
         )
@@ -98,7 +87,6 @@ if GEMINI_API_KEY and genai is not None:
         voice_client = None
 
 else:
-
     logger.warning(
         "Gemini Voice client not initialized."
     )
@@ -109,27 +97,13 @@ else:
 # ============================================================
 
 AI_MODES = {
-
-    "grammar":
-        "📌 الإعراب المفصل",
-
-    "rhetoric":
-        "🎨 التحليل البلاغي",
-
-    "morphology":
-        "⚖️ الصرف والبنية",
-
-    "dictionary":
-        "📖 معجم المفردات",
-
-    "explain":
-        "📝 شرح النص",
-
-    "prosody":
-        "🪶 العروض والقافية",
-
-    "poet":
-        "👤 الشاعر والعصر",
+    "grammar": "📌 الإعراب المفصل",
+    "rhetoric": "🎨 التحليل البلاغي",
+    "morphology": "⚖️ الصرف والبنية",
+    "dictionary": "📖 معجم المفردات",
+    "explain": "📝 شرح النص",
+    "prosody": "🪶 العروض والقافية",
+    "poet": "👤 الشاعر والعصر",
 }
 
 
@@ -143,40 +117,29 @@ def _transcribe_voice_file(file_path):
     """
 
     if not GEMINI_API_KEY:
-
         raise RuntimeError(
             "GEMINI_API_KEY غير موجود."
         )
 
-
     if voice_client is None:
-
         raise RuntimeError(
             "تعذر إنشاء اتصال Gemini للصوت."
         )
-
 
     logger.info(
         "Uploading voice file to Gemini..."
     )
 
-
-    # رفع الملف إلى Gemini
     audio_file = voice_client.files.upload(
         file=file_path
     )
-
 
     logger.info(
         "Voice file uploaded successfully."
     )
 
-
-    # إرسال الصوت إلى نموذج النسخ
     interaction = voice_client.interactions.create(
-
         model=VOICE_MODEL,
-
         input=[
             {
                 "type": "audio",
@@ -184,26 +147,18 @@ def _transcribe_voice_file(file_path):
                 "mime_type": audio_file.mime_type,
             }
         ],
-
         generation_config={
-
             "transcription_config": {
-
                 "mode": "smart",
-
-                # اللغة العربية
                 "language_codes": ["ar"],
             }
         },
     )
 
-
     if not interaction:
-
         raise RuntimeError(
             "Gemini أعاد استجابة فارغة."
         )
-
 
     result = getattr(
         interaction,
@@ -211,13 +166,10 @@ def _transcribe_voice_file(file_path):
         None,
     )
 
-
     if not result:
-
         raise RuntimeError(
             "Gemini لم يرجع نصاً للصوت."
         )
-
 
     return result.strip()
 
@@ -227,7 +179,6 @@ def _transcribe_voice_file(file_path):
 # ============================================================
 
 async def transcribe_voice(file_path):
-
     return await asyncio.to_thread(
         _transcribe_voice_file,
         file_path,
@@ -242,178 +193,100 @@ async def handle_voice(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
-
     if not update.message:
         return
-
 
     voice = update.message.voice
 
     if not voice:
         return
 
-
     status = await update.message.reply_text(
-
         "🎙️ استلمت التسجيل الصوتي.\n"
         "⏳ جاري استخراج الكلام إلى نص..."
     )
 
-
     temp_path = None
 
-
     try:
-
-        # ----------------------------------------------------
         # تحميل الصوت من Telegram
-        # ----------------------------------------------------
-
         telegram_file = await context.bot.get_file(
             voice.file_id
         )
 
-
-        # ----------------------------------------------------
         # إنشاء ملف مؤقت
-        # ----------------------------------------------------
-
         with tempfile.NamedTemporaryFile(
             suffix=".ogg",
             delete=False,
         ) as temp_file:
-
             temp_path = temp_file.name
 
-
-        # ----------------------------------------------------
         # تنزيل الصوت
-        # ----------------------------------------------------
-
         await telegram_file.download_to_drive(
             custom_path=temp_path
         )
-
 
         logger.info(
             "Voice downloaded: %s",
             temp_path,
         )
 
-
-        # ----------------------------------------------------
         # تحويل الصوت إلى نص
-        # ----------------------------------------------------
-
         text = await transcribe_voice(
             temp_path
         )
 
-
         if not text:
-
             await status.edit_text(
-
-                "❌ ما قدرت أستخرج كلام واضح "
-                "من التسجيل."
+                "❌ ما قدرت أستخرج كلام واضح من التسجيل."
             )
-
             return
 
-
-        # ----------------------------------------------------
         # حفظ النص للتحليل
-        # ----------------------------------------------------
-
         context.user_data["ai_text"] = text
 
-
-        # ----------------------------------------------------
         # عرض النص
-        # ----------------------------------------------------
-
         if len(text) <= 3900:
-
             await status.edit_text(
-
-                "🎙️ النص المستخرج:\n\n"
-                + text
+                "🎙️ النص المستخرج:\n\n" + text
             )
 
         else:
-
             await status.edit_text(
-
-                "🎙️ النص المستخرج:\n\n"
-                + text[:3900]
+                "🎙️ النص المستخرج:\n\n" + text[:3900]
             )
-
 
             remaining = text[3900:]
 
-
             while remaining:
-
                 chunk = remaining[:4000]
-
                 remaining = remaining[4000:]
-
 
                 await update.message.reply_text(
                     chunk
                 )
 
-
-        # ----------------------------------------------------
         # أزرار التحليل
-        # ----------------------------------------------------
-
         await update.message.reply_text(
-
             "🤖 شنو تريد أسوي للنص؟\n\n"
             "اختر نوع التحليل:",
-
             reply_markup=ai_markup(),
         )
 
-
     except Exception as error:
-
         logger.exception(
             "Voice transcription error."
         )
 
-
         error_text = str(error).upper()
-
-
-        # ----------------------------------------------------
-        # أخطاء الحصة
-        # ----------------------------------------------------
 
         if (
             "429" in error_text
             or "RESOURCE_EXHAUSTED" in error_text
         ):
-
             message = (
-
-                "⚠️ تم الوصول إلى حد الطلبات "
-                "مؤقتاً.\n\n"
-
+                "⚠️ تم الوصول إلى حد الطلبات مؤقتاً.\n\n"
                 "انتظر قليلاً وحاول مرة ثانية."
             )
 
-
-        # ----------------------------------------------------
-        # Gemini مشغول
-        # ----------------------------------------------------
-
-        elif (
-            "503" in error_text
-            or "UNAVAILABLE" in error_text
-        ):
-
-            message = (
-
-               
+       
