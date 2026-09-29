@@ -431,6 +431,7 @@ ARABIC_RULES = {
 
             "مثال:\n"
             "دخلَ المعلمُ مبتسماً.\n\n"
+
             "كيف دخل المعلم؟\n"
             "مبتسماً."
         ),
@@ -697,6 +698,7 @@ async def check_access(
         db.upsert_user(
             user.id,
             user.full_name,
+            user.username,
         )
 
     except Exception:
@@ -2566,6 +2568,7 @@ async def start(
         db.upsert_user(
             user.id,
             user.full_name,
+            user.username,
         )
 
     except Exception:
@@ -3351,6 +3354,45 @@ async def callback_router(
 
         return await reports.show_contact(
             q
+        )
+
+    # ========================================================
+    # Admin - Users
+    # ========================================================
+
+    if data == "users":
+
+        await safe_answer(q)
+
+        if not is_admin(
+            q.from_user.id
+        ):
+            return
+
+        return await admin.router(
+            q,
+            context,
+            "users",
+            "",
+        )
+
+    if data.startswith("userspage:"):
+
+        await safe_answer(q)
+
+        if not is_admin(
+            q.from_user.id
+        ):
+            return
+
+        return await admin.router(
+            q,
+            context,
+            "userspage",
+            data.split(
+                ":",
+                1
+            )[1],
         )
 
     # ========================================================
