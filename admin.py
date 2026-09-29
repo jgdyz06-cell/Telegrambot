@@ -45,10 +45,7 @@ def panel_markup():
             [Btn("🗑 حذف ملخص", callback_data="ap:dsum")],
             [Btn("🧹 مسح أسئلة مادة", callback_data="ap:cq")],
             [Btn("🗑 حذف مادة", callback_data="ap:dsub")],
-
-            # المستخدمون
             [Btn("👥 المستخدمون", callback_data="users")],
-
             [Btn("🔙 القائمة الرئيسية", callback_data="m")],
         ]
     )
@@ -105,35 +102,32 @@ def users_markup(page=0):
 
     pages = (total + USERS_PER_PAGE - 1) // USERS_PER_PAGE
 
+    # حماية من رقم صفحة غير صالح
+    if page >= pages:
+        page = pages - 1
+
     rows = []
 
+    navigation = []
+
     if page > 0:
-        rows.append(
-            [
-                Btn(
-                    "⬅️ السابق",
-                    callback_data=f"userspage:{page - 1}",
-                )
-            ]
+        navigation.append(
+            Btn(
+                "⬅️ السابق",
+                callback_data=f"userspage:{page - 1}",
+            )
         )
 
     if page < pages - 1:
-        if page > 0:
-            rows[-1].append(
-                Btn(
-                    "التالي ➡️",
-                    callback_data=f"userspage:{page + 1}",
-                )
+        navigation.append(
+            Btn(
+                "التالي ➡️",
+                callback_data=f"userspage:{page + 1}",
             )
-        else:
-            rows.append(
-                [
-                    Btn(
-                        "التالي ➡️",
-                        callback_data=f"userspage:{page + 1}",
-                    )
-                ]
-            )
+        )
+
+    if navigation:
+        rows.append(navigation)
 
     rows.append(
         [
@@ -163,19 +157,21 @@ def format_user(user):
     section = user["section"]
     last_seen = user["last_seen"]
 
-    text = f"👤 {name}\n"
-    text += f"🆔 {user_id}\n"
+    lines = [
+        f"👤 {name}",
+        f"🆔 {user_id}",
+    ]
 
     if username:
-        text += f"🔗 @{username}\n"
+        lines.append(f"🔗 @{username}")
 
     if section:
-        text += f"📚 القسم: {section}\n"
+        lines.append(f"📚 القسم: {section}")
 
     if last_seen:
-        text += f"🕐 آخر استخدام: {last_seen}"
+        lines.append(f"🕐 آخر استخدام: {last_seen}")
 
-    return text
+    return "\n".join(lines)
 
 
 async def show_users(q, page=0):
@@ -189,33 +185,48 @@ async def show_users(q, page=0):
             users_markup(0),
         )
 
+    pages = (total + USERS_PER_PAGE - 1) // USERS_PER_PAGE
+
+    # حماية من صفحة غير موجودة
+    if page < 0:
+        page = 0
+
+    if page >= pages:
+        page = pages - 1
+
     users = db.get_users_page(
         limit=USERS_PER_PAGE,
         offset=page * USERS_PER_PAGE,
     )
 
-    pages = (total + USERS_PER_PAGE - 1) // USERS_PER_PAGE
-
     lines = [
-        "👥 **المستخدمون**",
+        "👥 المستخدمون",
         "",
-        f"📊 العدد الكلي: **{total}**",
-        f"📄 الصفحة: **{page + 1} / {pages}**",
+        f"📊 العدد الكلي: {total}",
+        f"📄 الصفحة: {page + 1} / {pages}",
         "",
     ]
 
     for index, user in enumerate(users, start=1):
-        lines.append(
-            f"**{index + page * USERS_PER_PAGE}.** "
-            + format_user(user)
-        )
-        lines.append("")
+        number = index + page * USERS_PER_PAGE
 
+        lines.append(
+            f"{number}. {format_user(user)}"
+        )
+
+        lines.append(
+            "━━━━━━━━━━━━━━"
+        )
+
+    text = "\n".join(lines).strip()
+
+    # مهم:
+    # لا نستخدم Markdown هنا حتى لا تتسبب أسماء المستخدمين
+    # أو الـ username برموز خاصة في فشل رسالة Telegram.
     return await show(
         q,
-        "\n".join(lines).strip(),
+        text,
         users_markup(page),
-        parse_mode="Markdown",
     )
 
 
@@ -225,19 +236,28 @@ async def show_users(q, page=0):
 
 async def router(q, context, action, arg):
 
+    # --------------------------------------------------------
     # لوحة الأدمن
+    # --------------------------------------------------------
+
     if action == "ad":
+
         if arg == "newsubj":
+
             context.user_data["await"] = {
                 "type": "subject"
             }
+
             return await show(
                 q,
                 "اكتب اسم المادة الجديدة:\n\n"
                 "للإلغاء: /cancel",
             )
 
-        context.user_data.pop("await", None)
+        context.user_data.pop(
+            "await",
+            None,
+        )
 
         return await show(
             q,
@@ -245,13 +265,28 @@ async def router(q, context, action, arg):
             panel_markup(),
         )
 
+    # --------------------------------------------------------
     # المستخدمون
-    if action == "users":
-        context.user_data.pop("await", None)
-        return await show_users(q, 0)
+    # --------------------------------------------------------
 
+    if action == "users":
+
+        context.user_data.pop(
+            "await",
+            None,
+        )
+
+        return await show_users(
+            q,
+            0,
+        )
+
+    # --------------------------------------------------------
     # صفحات المستخدمين
+    # --------------------------------------------------------
+
     if action == "userspage":
+
         try:
             page = int(arg)
         except (TypeError, ValueError):
@@ -260,10 +295,17 @@ async def router(q, context, action, arg):
         if page < 0:
             page = 0
 
-        return await show_users(q, page)
+        return await show_users(
+            q,
+            page,
+        )
 
+    # --------------------------------------------------------
     # اختيار مادة
+    # --------------------------------------------------------
+
     if action == "ap":
+
         rows = [
             [
                 Btn(
@@ -292,29 +334,57 @@ async def router(q, context, action, arg):
             Markup(rows),
         )
 
+    # --------------------------------------------------------
     # اختيار مادة وتنفيذ الإجراء
+    # --------------------------------------------------------
+
     if action == "ak":
+
         kind, _, sid_s = arg.partition(":")
+
+        try:
+            sid = int(sid_s)
+        except (TypeError, ValueError):
+            return await show(
+                q,
+                "⚠️ رقم المادة غير صالح.",
+                back_markup("ad"),
+            )
 
         return await pick_subject(
             q,
             context,
             kind,
-            int(sid_s),
+            sid,
         )
 
+    # --------------------------------------------------------
     # تأكيد الحذف
+    # --------------------------------------------------------
+
     if action == "ay":
+
         kind, _, sid_s = arg.partition(":")
 
-        sid = int(sid_s)
+        try:
+            sid = int(sid_s)
+        except (TypeError, ValueError):
+            return await show(
+                q,
+                "⚠️ رقم المادة غير صالح.",
+                back_markup("ad"),
+            )
 
         if kind == "cq":
+
             db.clear_questions(sid)
+
             msg = "✅ انمسحت الأسئلة."
 
         elif kind == "dsub":
+
             db.delete_subject(sid)
+
             msg = "✅ انحذفت المادة."
 
         else:
@@ -329,9 +399,20 @@ async def router(q, context, action, arg):
             ),
         )
 
+    # --------------------------------------------------------
     # حذف ملخص
+    # --------------------------------------------------------
+
     if action == "ds":
-        db.delete_summary(int(arg))
+
+        try:
+            sum_id = int(arg)
+        except (TypeError, ValueError):
+            return await show(
+                q,
+                "⚠️ رقم الملخص غير صالح.",
+                back_markup("ad"),
+            )
 
         await show(
             q,
@@ -341,6 +422,8 @@ async def router(q, context, action, arg):
                 "⚙️ لوحة الأدمن",
             ),
         )
+
+        db.delete_summary(sum_id)
 
 
 # ============================================================
@@ -352,6 +435,7 @@ async def pick_subject(q, context, kind, sid):
     subj = db.get_subject(sid)
 
     if not subj:
+
         return await show(
             q,
             "⚠️ المادة غير موجودة.",
@@ -360,7 +444,12 @@ async def pick_subject(q, context, kind, sid):
 
     name = subj["name"]
 
+    # --------------------------------------------------------
+    # إضافة ملخص
+    # --------------------------------------------------------
+
     if kind == "sum":
+
         context.user_data["await"] = {
             "type": "summary",
             "sid": sid,
@@ -374,7 +463,12 @@ async def pick_subject(q, context, kind, sid):
             "للإلغاء: /cancel",
         )
 
+    # --------------------------------------------------------
+    # إضافة أسئلة
+    # --------------------------------------------------------
+
     if kind == "q":
+
         context.user_data["await"] = {
             "type": "questions",
             "sid": sid,
@@ -386,10 +480,16 @@ async def pick_subject(q, context, kind, sid):
             f"{QUESTIONS_HELP}",
         )
 
+    # --------------------------------------------------------
+    # حذف ملخص
+    # --------------------------------------------------------
+
     if kind == "dsum":
+
         items = db.summaries(sid)
 
         if not items:
+
             return await show(
                 q,
                 "ما في ملخصات لهذي المادة.",
@@ -421,7 +521,12 @@ async def pick_subject(q, context, kind, sid):
             Markup(rows),
         )
 
+    # --------------------------------------------------------
+    # مسح الأسئلة
+    # --------------------------------------------------------
+
     if kind == "cq":
+
         n = db.count_questions(sid)
 
         return await show(
@@ -433,7 +538,12 @@ async def pick_subject(q, context, kind, sid):
             ),
         )
 
+    # --------------------------------------------------------
+    # حذف المادة
+    # --------------------------------------------------------
+
     if kind == "dsub":
+
         return await show(
             q,
             f"متأكد تبي تحذف مادة {name} بكل محتواها ونتائجها؟",
