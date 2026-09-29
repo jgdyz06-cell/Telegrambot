@@ -102,7 +102,6 @@ def users_markup(page=0):
 
     pages = (total + USERS_PER_PAGE - 1) // USERS_PER_PAGE
 
-    # حماية من رقم صفحة غير صالح
     if page >= pages:
         page = pages - 1
 
@@ -187,7 +186,6 @@ async def show_users(q, page=0):
 
     pages = (total + USERS_PER_PAGE - 1) // USERS_PER_PAGE
 
-    # حماية من صفحة غير موجودة
     if page < 0:
         page = 0
 
@@ -207,6 +205,8 @@ async def show_users(q, page=0):
         "",
     ]
 
+    user_buttons = []
+
     for index, user in enumerate(users, start=1):
         number = index + page * USERS_PER_PAGE
 
@@ -218,15 +218,67 @@ async def show_users(q, page=0):
             "━━━━━━━━━━━━━━"
         )
 
+        # زر فتح حساب المستخدم باستخدام Telegram ID
+        user_id = user["user_id"]
+
+        user_buttons.append(
+            [
+                Btn(
+                    f"👤 فتح حساب المستخدم {number}",
+                    url=f"tg://user?id={user_id}",
+                )
+            ]
+        )
+
     text = "\n".join(lines).strip()
 
-    # مهم:
-    # لا نستخدم Markdown هنا حتى لا تتسبب أسماء المستخدمين
-    # أو الـ username برموز خاصة في فشل رسالة Telegram.
+    # أزرار فتح الحسابات
+    keyboard = user_buttons
+
+    # أزرار التنقل
+    navigation = []
+
+    if page > 0:
+        navigation.append(
+            Btn(
+                "⬅️ السابق",
+                callback_data=f"userspage:{page - 1}",
+            )
+        )
+
+    if page < pages - 1:
+        navigation.append(
+            Btn(
+                "التالي ➡️",
+                callback_data=f"userspage:{page + 1}",
+            )
+        )
+
+    if navigation:
+        keyboard.append(navigation)
+
+    keyboard.append(
+        [
+            Btn(
+                "🔄 تحديث",
+                callback_data=f"userspage:{page}",
+            )
+        ]
+    )
+
+    keyboard.append(
+        [
+            Btn(
+                "🔙 لوحة الأدمن",
+                callback_data="ad",
+            )
+        ]
+    )
+
     return await show(
         q,
         text,
-        users_markup(page),
+        Markup(keyboard),
     )
 
 
@@ -414,7 +466,9 @@ async def router(q, context, action, arg):
                 back_markup("ad"),
             )
 
-        await show(
+        db.delete_summary(sum_id)
+
+        return await show(
             q,
             "✅ انحذف الملخص.",
             back_markup(
@@ -422,8 +476,6 @@ async def router(q, context, action, arg):
                 "⚙️ لوحة الأدمن",
             ),
         )
-
-        db.delete_summary(sum_id)
 
 
 # ============================================================
