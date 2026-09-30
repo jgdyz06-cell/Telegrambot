@@ -36,6 +36,7 @@ import reports
 import seed
 import timetable
 import webapp
+import weather
 
 from config import BOT_TOKEN, logger
 
@@ -2550,6 +2551,90 @@ async def show_rule(
 
 
 # ============================================================
+# Weather - Kirkuk
+# ============================================================
+
+async def show_weather(
+    update,
+    context,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    await show(
+        q,
+        "🌤️ طقس كركوك\n\n"
+        "⏳ جاري جلب حالة الطقس...",
+    )
+
+    try:
+
+        data = await weather.get_weather()
+
+        text = weather.format_weather(data)
+
+        await show(
+            q,
+            text,
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔄 تحديث الطقس",
+                            callback_data="weather",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🏠 القائمة الرئيسية",
+                            callback_data="m",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Weather request failed."
+        )
+
+        await show(
+            q,
+            "❌ تعذر جلب طقس كركوك حالياً.\n\n"
+            "حاول مرة ثانية بعد قليل.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔄 إعادة المحاولة",
+                            callback_data="weather",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🏠 القائمة الرئيسية",
+                            callback_data="m",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+
+# ============================================================
 # Start
 # ============================================================
 
@@ -3083,6 +3168,17 @@ async def callback_router(
     if data == "m":
 
         return await show_main_menu(
+            update,
+            context,
+        )
+
+    # ========================================================
+    # Weather - Kirkuk
+    # ========================================================
+
+    if data == "weather":
+
+        return await show_weather(
             update,
             context,
         )
