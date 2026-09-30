@@ -68,7 +68,7 @@ class _LibraryModule:
     SHAMELA_BASE = "https://shamela.ws/"
 
 @staticmethod
-    def _clean_query(query):
+    def _clean_query(query)
         return " ".join(str(query or "").strip().split())[:300]
 
 @classmethod
