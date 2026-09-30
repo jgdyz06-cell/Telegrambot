@@ -40,6 +40,7 @@ import seed
 import timetable
 import webapp
 import weather
+import outfit
 
 from config import BOT_TOKEN, logger
 
@@ -1945,7 +1946,7 @@ async def outfit_generate( update, context, gender, ):
 
     try:
 
-        ok, result = await generate_outfit(
+        ok, result = await outfit.generate_outfit(
             q.from_user.id,
             gender,
         )
