@@ -1,0 +1,1 @@
+deploy latest bot.py
