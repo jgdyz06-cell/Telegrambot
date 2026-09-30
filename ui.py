@@ -53,6 +53,39 @@ async def show(q, text, markup=None):
 
 
 # ============================================================
+# قائمة الأوتفيت
+# ============================================================
+
+def outfit_markup():
+
+    return Markup(
+        [
+            [
+                Btn(
+                    "🖤 For Him",
+                    callback_data="outfit:him",
+                    style="primary",
+                )
+            ],
+            [
+                Btn(
+                    "🤍 For Her",
+                    callback_data="outfit:her",
+                    style="success",
+                )
+            ],
+            [
+                Btn(
+                    "🔙 رجوع",
+                    callback_data="m",
+                    style="primary",
+                )
+            ],
+        ]
+    )
+
+
+# ============================================================
 # القائمة الرئيسية
 # ============================================================
 
@@ -106,6 +139,21 @@ def main_menu(uid):
                 callback_data="aichallenge",
                 style="success",
             )
+        ],
+
+        # الأوتفيت + الطقس
+        [
+            Btn(
+                "👕 Outfit",
+                callback_data="outfit",
+                style="primary",
+            ),
+
+            Btn(
+                "🌤️ Weather",
+                callback_data="weather",
+                style="success",
+            ),
         ],
 
         # واجهة قطوف الأكلم
