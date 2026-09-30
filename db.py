@@ -1,19 +1,36 @@
 # -*- coding: utf-8 -*-
-"""قاعدة البيانات: المواد والملخصات + المستخدمون."""
+
+"""قاعدة البيانات: المواد والملخصات + المستخدمون + الملابس."""
 
 import sqlite3
 
 from dbcore import connect, sql_all, sql_one, sql_run
 from dbq import (  # noqa: F401
-    add_questions, best_for, clear_questions, count_questions,
-    parse_questions, questions, save_result, top, user_stats,
+    add_questions,
+    best_for,
+    clear_questions,
+    count_questions,
+    parse_questions,
+    questions,
+    save_result,
+    top,
+    user_stats,
 )
 
+
 DEFAULT_SUBJECTS = [
-    "النحو", "الصرف", "البلاغة", "الأدب الإسلامي", "الحاسوب",
-    "الإنكليزي", "أسس تربية", "جرائم حزب البعث", "نصوص قديمة",
+    "النحو",
+    "الصرف",
+    "البلاغة",
+    "الأدب الإسلامي",
+    "الحاسوب",
+    "الإنكليزي",
+    "أسس تربية",
+    "جرائم حزب البعث",
+    "نصوص قديمة",
     "العروض والقافية",
 ]
+
 
 SEED_SUMMARIES = {
     "النحو": (
@@ -21,6 +38,7 @@ SEED_SUMMARIES = {
         "https://drive.google.com/file/d/11vHek92zyJfhSXD9fIUdJadSCgyRwZ6l/view?usp=drivesdk",
     ),
 }
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS subjects (
@@ -63,41 +81,74 @@ CREATE TABLE IF NOT EXISTS users (
     first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS wardrobe_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    gender TEXT NOT NULL,
+    category TEXT NOT NULL,
+    color TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_wardrobe_user
+ON wardrobe_items(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_wardrobe_user_gender
+ON wardrobe_items(user_id, gender);
 """
 
 
+# ============================================================
+# Database Initialization
+# ============================================================
+
 def init():
     c = connect()
+
     try:
+
         with c:
+
             c.executescript(SCHEMA)
 
+            # ------------------------------------------------
             # ترقية قاعدة البيانات القديمة إذا كانت users موجودة
             # بدون حذف المستخدمين الحاليين.
+            # ------------------------------------------------
+
             columns = {
                 row[1]
-                for row in c.execute("PRAGMA table_info(users)").fetchall()
+                for row in c.execute(
+                    "PRAGMA table_info(users)"
+                ).fetchall()
             }
 
             if "username" not in columns:
+
                 c.execute(
                     "ALTER TABLE users ADD COLUMN username TEXT"
                 )
 
             if "first_seen" not in columns:
+
                 c.execute(
                     "ALTER TABLE users ADD COLUMN "
                     "first_seen DATETIME"
                 )
 
             if "last_seen" not in columns:
+
                 c.execute(
                     "ALTER TABLE users ADD COLUMN "
                     "last_seen DATETIME"
                 )
 
+            # ------------------------------------------------
             # المستخدمون الموجودون مسبقاً يأخذون الوقت الحالي
             # إذا كانت أعمدة الوقت جديدة.
+            # ------------------------------------------------
+
             c.execute(
                 """
                 UPDATE users
@@ -113,24 +164,45 @@ def init():
             )
 
     finally:
+
         c.close()
 
-    if not sql_all("SELECT id FROM subjects LIMIT 1"):
+    # --------------------------------------------------------
+    # إضافة المواد الافتراضية إذا كانت القاعدة فارغة.
+    # --------------------------------------------------------
+
+    if not sql_all(
+        "SELECT id FROM subjects LIMIT 1"
+    ):
+
         for name in DEFAULT_SUBJECTS:
+
             sid = add_subject(name)
 
             if name in SEED_SUMMARIES and sid:
-                title, url = SEED_SUMMARIES[name]
-                add_summary(sid, title, url=url)
 
+                title, url = SEED_SUMMARIES[name]
+
+                add_summary(
+                    sid,
+                    title,
+                    url=url,
+                )
+
+
+# ============================================================
+# Subjects
+# ============================================================
 
 def subjects():
+
     return sql_all(
         "SELECT id, name FROM subjects ORDER BY id"
     )
 
 
 def subjects_with_counts():
+
     return sql_all(
         "SELECT s.id, s.name,"
         " (SELECT COUNT(*) FROM questions "
@@ -142,6 +214,7 @@ def subjects_with_counts():
 
 
 def get_subject(sid):
+
     return sql_one(
         "SELECT id, name FROM subjects WHERE id = ?",
         (sid,),
@@ -149,23 +222,33 @@ def get_subject(sid):
 
 
 def add_subject(name):
+
     try:
+
         return sql_run(
             "INSERT INTO subjects(name) VALUES (?)",
             (name,),
         )
+
     except sqlite3.IntegrityError:
+
         return None
 
 
 def delete_subject(sid):
+
     sql_run(
         "DELETE FROM subjects WHERE id = ?",
         (sid,),
     )
 
 
+# ============================================================
+# Summaries
+# ============================================================
+
 def summaries(sid):
+
     return sql_all(
         "SELECT * FROM summaries "
         "WHERE subject_id = ? ORDER BY id",
@@ -174,29 +257,50 @@ def summaries(sid):
 
 
 def get_summary(sum_id):
+
     return sql_one(
         "SELECT * FROM summaries WHERE id = ?",
         (sum_id,),
     )
 
 
-def add_summary(sid, title, url=None, file_id=None):
+def add_summary(
+    sid,
+    title,
+    url=None,
+    file_id=None,
+):
+
     return sql_run(
         "INSERT INTO summaries("
         "subject_id, title, url, file_id"
         ") VALUES (?,?,?,?)",
-        (sid, title, url, file_id),
+        (
+            sid,
+            title,
+            url,
+            file_id,
+        ),
     )
 
 
 def delete_summary(sum_id):
+
     sql_run(
         "DELETE FROM summaries WHERE id = ?",
         (sum_id,),
     )
 
 
-def upsert_user(uid, name, username=None):
+# ============================================================
+# Users
+# ============================================================
+
+def upsert_user(
+    uid,
+    name,
+    username=None,
+):
     """
     حفظ أو تحديث بيانات مستخدم تيليجرام.
 
@@ -239,7 +343,11 @@ def upsert_user(uid, name, username=None):
     )
 
 
-def set_section(uid, section):
+def set_section(
+    uid,
+    section,
+):
+
     sql_run(
         """
         INSERT INTO users(
@@ -269,6 +377,7 @@ def set_section(uid, section):
 
 
 def get_section(uid):
+
     r = sql_one(
         "SELECT section FROM users WHERE user_id = ?",
         (uid,),
@@ -278,6 +387,7 @@ def get_section(uid):
 
 
 def users_with_section():
+
     return sql_all(
         """
         SELECT user_id, section
@@ -293,11 +403,14 @@ def users_with_section():
 
 def get_users_count():
     """إرجاع عدد المستخدمين المسجلين."""
+
     r = sql_one(
         "SELECT COUNT(*) AS count FROM users"
     )
 
-    return int(r["count"]) if r else 0
+    return int(
+        r["count"]
+    ) if r else 0
 
 
 def get_all_users():
@@ -320,7 +433,10 @@ def get_all_users():
     )
 
 
-def get_users_page(limit=10, offset=0):
+def get_users_page(
+    limit=10,
+    offset=0,
+):
     """
     إرجاع مجموعة من المستخدمين للعرض على صفحات.
     """
@@ -343,3 +459,225 @@ def get_users_page(limit=10, offset=0):
             int(offset),
         ),
     )
+
+
+# ============================================================
+# Outfit / Wardrobe
+# ============================================================
+
+def add_wardrobe_item(
+    uid,
+    gender,
+    category,
+    color,
+):
+    """
+    إضافة قطعة ملابس إلى خزانة المستخدم.
+
+    gender:
+        him / her
+
+    category:
+        نوع القطعة مثل قميص، بنطلون، حذاء...
+
+    color:
+        لون القطعة.
+    """
+
+    return sql_run(
+        """
+        INSERT INTO wardrobe_items(
+            user_id,
+            gender,
+            category,
+            color
+        )
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            uid,
+            str(gender).strip(),
+            str(category).strip(),
+            str(color).strip(),
+        ),
+    )
+
+
+def get_wardrobe_items(
+    uid,
+    gender=None,
+):
+    """
+    جلب ملابس المستخدم.
+
+    إذا تم تمرير gender:
+        يجلب ملابس For Him أو For Her فقط.
+
+    إذا لم يتم تمريره:
+        يجلب جميع الملابس.
+    """
+
+    if gender:
+
+        return sql_all(
+            """
+            SELECT
+                id,
+                user_id,
+                gender,
+                category,
+                color,
+                created_at
+            FROM wardrobe_items
+            WHERE user_id = ?
+              AND gender = ?
+            ORDER BY id DESC
+            """,
+            (
+                uid,
+                str(gender).strip(),
+            ),
+        )
+
+    return sql_all(
+        """
+        SELECT
+            id,
+            user_id,
+            gender,
+            category,
+            color,
+            created_at
+        FROM wardrobe_items
+        WHERE user_id = ?
+        ORDER BY id DESC
+        """,
+        (uid,),
+    )
+
+
+def get_wardrobe_item(
+    item_id,
+    uid,
+):
+    """
+    جلب قطعة واحدة مع التأكد من أنها تخص المستخدم.
+    """
+
+    return sql_one(
+        """
+        SELECT
+            id,
+            user_id,
+            gender,
+            category,
+            color,
+            created_at
+        FROM wardrobe_items
+        WHERE id = ?
+          AND user_id = ?
+        """,
+        (
+            item_id,
+            uid,
+        ),
+    )
+
+
+def delete_wardrobe_item(
+    item_id,
+    uid,
+):
+    """
+    حذف قطعة ملابس تخص المستخدم فقط.
+    """
+
+    sql_run(
+        """
+        DELETE FROM wardrobe_items
+        WHERE id = ?
+          AND user_id = ?
+        """,
+        (
+            item_id,
+            uid,
+        ),
+    )
+
+
+def clear_wardrobe(
+    uid,
+    gender=None,
+):
+    """
+    حذف خزانة المستخدم.
+
+    إذا تم تمرير gender:
+        يحذف ملابس ذلك القسم فقط.
+
+    إذا لم يتم تمريره:
+        يحذف جميع الملابس.
+    """
+
+    if gender:
+
+        sql_run(
+            """
+            DELETE FROM wardrobe_items
+            WHERE user_id = ?
+              AND gender = ?
+            """,
+            (
+                uid,
+                str(gender).strip(),
+            ),
+        )
+
+        return
+
+    sql_run(
+        """
+        DELETE FROM wardrobe_items
+        WHERE user_id = ?
+        """,
+        (uid,),
+    )
+
+
+def count_wardrobe_items(
+    uid,
+    gender=None,
+):
+    """
+    إرجاع عدد قطع الملابس المحفوظة.
+    """
+
+    if gender:
+
+        result = sql_one(
+            """
+            SELECT COUNT(*) AS count
+            FROM wardrobe_items
+            WHERE user_id = ?
+              AND gender = ?
+            """,
+            (
+                uid,
+                str(gender).strip(),
+            ),
+        )
+
+    else:
+
+        result = sql_one(
+            """
+            SELECT COUNT(*) AS count
+            FROM wardrobe_items
+            WHERE user_id = ?
+            """,
+            (uid,),
+        )
+
+    return int(
+        result["count"]
+    ) if result else 0
