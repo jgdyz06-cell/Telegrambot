@@ -56,7 +56,7 @@ from ai import ask_ai
 
 
 # ============================================================
-# Gemini Voice + Image + Grammar Challenge
+# Gemini Voice + Image + Grammar Challenge + Outfit
 # ============================================================
 
 try:
@@ -99,6 +99,16 @@ IMAGE_MODEL = os.getenv(
 
 CHALLENGE_MODEL = os.getenv(
     "CHALLENGE_MODEL",
+    "gemini-3.1-flash-lite",
+).strip()
+
+
+# ------------------------------------------------------------
+# Outfit
+# ------------------------------------------------------------
+
+OUTFIT_MODEL = os.getenv(
+    "OUTFIT_MODEL",
     "gemini-3.1-flash-lite",
 ).strip()
 
@@ -745,6 +755,1191 @@ async def check_access(
         )
 
     return False
+
+
+# ============================================================
+# Outfit
+# ============================================================
+
+def outfit_gender_markup():
+
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🖤 For Him",
+                    callback_data="outfit:him",
+                ),
+                InlineKeyboardButton(
+                    "🤍 For Her",
+                    callback_data="outfit:her",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🏠 القائمة الرئيسية",
+                    callback_data="m",
+                ),
+            ],
+        ]
+    )
+
+
+def outfit_menu_markup(gender):
+
+    title = (
+        "🖤 For Him"
+        if gender == "him"
+        else "🤍 For Her"
+    )
+
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "➕ إضافة قطعة",
+                    callback_data=f"outfit:add:{gender}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "👕 ملابسي",
+                    callback_data=f"outfit:list:{gender}",
+                ),
+                InlineKeyboardButton(
+                    "✨ نسّق لي",
+                    callback_data=f"outfit:generate:{gender}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🗑️ إدارة الملابس",
+                    callback_data=f"outfit:manage:{gender}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔄 تغيير القسم",
+                    callback_data="outfit",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🏠 القائمة الرئيسية",
+                    callback_data="m",
+                ),
+            ],
+        ]
+    )
+
+
+def outfit_manage_markup(gender):
+
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "👕 عرض الملابس",
+                    callback_data=f"outfit:list:{gender}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🗑️ حذف قطعة",
+                    callback_data=f"outfit:delete_menu:{gender}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🧹 مسح كل الملابس",
+                    callback_data=f"outfit:clear:{gender}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "⬅️ رجوع",
+                    callback_data=f"outfit:{gender}",
+                ),
+            ],
+        ]
+    )
+
+
+async def show_outfit(
+    update,
+    context,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    await show(
+        q,
+        "👕 Outfit\n\n"
+        "اختار القسم:",
+        outfit_gender_markup(),
+    )
+
+
+async def show_outfit_gender(
+    update,
+    context,
+    gender,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    if gender == "him":
+        title = "🖤 For Him"
+    elif gender == "her":
+        title = "🤍 For Her"
+    else:
+        return
+
+    try:
+        count = db.count_wardrobe_items(
+            q.from_user.id,
+            gender,
+        )
+    except Exception:
+        logger.exception(
+            "Could not count wardrobe items."
+        )
+        count = 0
+
+    await show(
+        q,
+        "👕 Outfit\n\n"
+        f"{title}\n\n"
+        f"👕 القطع المحفوظة: {count}\n\n"
+        "أضف ملابسك وألوانها، وبعدها أقدر "
+        "أرتب لك تنسيقات باستخدام الموجود عندك فقط.",
+        outfit_menu_markup(gender),
+    )
+
+
+async def outfit_add_start(
+    update,
+    context,
+    gender,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    if gender not in ("him", "her"):
+        return
+
+    context.user_data["outfit_await"] = {
+        "gender": gender,
+    }
+
+    title = (
+        "🖤 For Him"
+        if gender == "him"
+        else "🤍 For Her"
+    )
+
+    await q.edit_message_text(
+        "➕ إضافة قطعة ملابس\n\n"
+        f"{title}\n\n"
+        "أرسل اسم القطعة ولونها بهذا الشكل:\n\n"
+        "قميص - أسود\n"
+        "بنطال - جينز أزرق\n"
+        "حذاء - أبيض\n\n"
+        "📌 كل رسالة تضيف قطعة واحدة.\n"
+        "مثال: تيشيرت - أبيض",
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "❌ إلغاء",
+                        callback_data=f"outfit:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
+
+
+def parse_outfit_item(text):
+
+    text = (text or "").strip()
+
+    if not text:
+        return None
+
+    separators = [
+        " - ",
+        "-",
+        " – ",
+        "–",
+        " — ",
+        "—",
+        "|",
+        "،",
+        ",",
+    ]
+
+    category = ""
+    color = ""
+
+    for separator in separators:
+
+        if separator in text:
+
+            parts = text.split(
+                separator,
+                1,
+            )
+
+            category = parts[0].strip()
+            color = parts[1].strip()
+
+            break
+
+    if not category or not color:
+        return None
+
+    if len(category) > 80:
+        category = category[:80].strip()
+
+    if len(color) > 80:
+        color = color[:80].strip()
+
+    return category, color
+
+
+async def outfit_save_text(
+    update,
+    context,
+    text,
+):
+
+    message = update.message
+
+    if not message:
+        return
+
+    outfit_await = context.user_data.get(
+        "outfit_await"
+    )
+
+    if not outfit_await:
+        return False
+
+    gender = outfit_await.get(
+        "gender"
+    )
+
+    if gender not in ("him", "her"):
+        context.user_data.pop(
+            "outfit_await",
+            None,
+        )
+        return False
+
+    parsed = parse_outfit_item(text)
+
+    if not parsed:
+
+        await message.reply_text(
+            "❌ الصيغة غير واضحة.\n\n"
+            "اكتبها بهذا الشكل:\n"
+            "قميص - أسود\n\n"
+            "أو:\n"
+            "بنطال - جينز أزرق"
+        )
+
+        return True
+
+    category, color = parsed
+
+    try:
+
+        db.add_wardrobe_item(
+            message.from_user.id,
+            gender,
+            category,
+            color,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not save wardrobe item."
+        )
+
+        await message.reply_text(
+            "❌ ما قدرت أحفظ القطعة حالياً.\n\n"
+            "حاول مرة ثانية."
+        )
+
+        return True
+
+    title = (
+        "🖤 For Him"
+        if gender == "him"
+        else "🤍 For Her"
+    )
+
+    await message.reply_text(
+        "✅ تم حفظ القطعة.\n\n"
+        f"{title}\n"
+        f"👕 القطعة: {category}\n"
+        f"🎨 اللون: {color}\n\n"
+        "تقدر تضيف قطعة ثانية بنفس الطريقة.",
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "➕ إضافة قطعة ثانية",
+                        callback_data=f"outfit:add:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "👕 عرض ملابسي",
+                        callback_data=f"outfit:list:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "✨ نسّق لي",
+                        callback_data=f"outfit:generate:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ رجوع",
+                        callback_data=f"outfit:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
+
+    return True
+
+
+async def outfit_list(
+    update,
+    context,
+    gender,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    try:
+
+        items = db.get_wardrobe_items(
+            q.from_user.id,
+            gender,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not load wardrobe."
+        )
+
+        await show(
+            q,
+            "❌ تعذر تحميل الملابس حالياً.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:{gender}",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+        return
+
+    title = (
+        "🖤 For Him"
+        if gender == "him"
+        else "🤍 For Her"
+    )
+
+    if not items:
+
+        await show(
+            q,
+            "👕 ملابسي\n\n"
+            f"{title}\n\n"
+            "ما عندك قطع محفوظة حالياً.\n\n"
+            "أضف ملابسك وألوانها حتى أستخدمها "
+            "في تنسيق الملابس.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "➕ إضافة قطعة",
+                            callback_data=f"outfit:add:{gender}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:{gender}",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+        return
+
+    lines = [
+        "👕 **ملابسي**",
+        "",
+        title,
+        "",
+    ]
+
+    for index, item in enumerate(items, 1):
+
+        category = item["category"]
+        color = item["color"]
+
+        lines.append(
+            f"{index}. 👕 {category} — 🎨 {color}"
+        )
+
+    lines.extend(
+        [
+            "",
+            "يمكنك حذف قطعة من قسم إدارة الملابس.",
+        ]
+    )
+
+    await show(
+        q,
+        "\n".join(lines),
+        InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "✨ نسّق لي",
+                        callback_data=f"outfit:generate:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🗑️ إدارة الملابس",
+                        callback_data=f"outfit:manage:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ رجوع",
+                        callback_data=f"outfit:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
+
+
+async def outfit_manage(
+    update,
+    context,
+    gender,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    await show(
+        q,
+        "🗑️ إدارة الملابس\n\n"
+        "اختار العملية التي تريدها:",
+        outfit_manage_markup(gender),
+    )
+
+
+async def outfit_delete_menu(
+    update,
+    context,
+    gender,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    try:
+
+        items = db.get_wardrobe_items(
+            q.from_user.id,
+            gender,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not load wardrobe for delete."
+        )
+
+        return
+
+    if not items:
+
+        await show(
+            q,
+            "🗑️ حذف قطعة\n\n"
+            "ما عندك ملابس محفوظة حتى تحذفها.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:manage:{gender}",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+        return
+
+    rows = []
+
+    for item in items:
+
+        item_id = int(item["id"])
+
+        label = (
+            f"🗑️ {item['category']} — "
+            f"{item['color']}"
+        )
+
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    label,
+                    callback_data=f"outfit:delete:{item_id}:{gender}",
+                )
+            ]
+        )
+
+    rows.append(
+        [
+            InlineKeyboardButton(
+                "⬅️ رجوع",
+                callback_data=f"outfit:manage:{gender}",
+            )
+        ]
+    )
+
+    await show(
+        q,
+        "🗑️ اختار القطعة التي تريد حذفها:",
+        InlineKeyboardMarkup(rows),
+    )
+
+
+async def outfit_delete(
+    update,
+    context,
+    item_id,
+    gender,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    try:
+
+        item = db.get_wardrobe_item(
+            item_id,
+        )
+
+        if not item:
+            await show(
+                q,
+                "❌ القطعة غير موجودة.",
+                InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "⬅️ رجوع",
+                                callback_data=f"outfit:manage:{gender}",
+                            )
+                        ]
+                    ]
+                ),
+            )
+            return
+
+        if int(item["user_id"]) != q.from_user.id:
+            return
+
+        db.delete_wardrobe_item(
+            item_id,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not delete wardrobe item."
+        )
+
+        await show(
+            q,
+            "❌ تعذر حذف القطعة حالياً.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:manage:{gender}",
+                        )
+                    ]
+                ]
+            ),
+        )
+
+        return
+
+    await show(
+        q,
+        "✅ تم حذف القطعة.",
+        InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "🗑️ حذف قطعة ثانية",
+                        callback_data=f"outfit:delete_menu:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "👕 عرض الملابس",
+                        callback_data=f"outfit:list:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ رجوع",
+                        callback_data=f"outfit:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
+
+
+async def outfit_clear(
+    update,
+    context,
+    gender,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    await show(
+        q,
+        "⚠️ هل أنت متأكد؟\n\n"
+        "سيتم حذف كل الملابس المحفوظة لهذا القسم.",
+        InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "🗑️ نعم، احذف الكل",
+                        callback_data=f"outfit:clear_yes:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "❌ إلغاء",
+                        callback_data=f"outfit:manage:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
+
+
+async def outfit_clear_yes(
+    update,
+    context,
+    gender,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    try:
+
+        db.clear_wardrobe(
+            q.from_user.id,
+            gender,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not clear wardrobe."
+        )
+
+        await show(
+            q,
+            "❌ تعذر مسح الملابس حالياً.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:{gender}",
+                        )
+                    ]
+                ]
+            ),
+        )
+
+        return
+
+    await show(
+        q,
+        "✅ تم مسح جميع الملابس المحفوظة لهذا القسم.",
+        InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "➕ إضافة ملابس",
+                        callback_data=f"outfit:add:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ رجوع",
+                        callback_data=f"outfit:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
+
+
+def _generate_outfit_sync(
+    gender,
+    items,
+):
+
+    if not GEMINI_API_KEY:
+        raise RuntimeError(
+            "GEMINI_API_KEY غير موجود."
+        )
+
+    if image_client is None:
+        raise RuntimeError(
+            "تعذر الاتصال بخدمة Gemini."
+        )
+
+    if not items:
+        raise RuntimeError(
+            "لا توجد ملابس محفوظة."
+        )
+
+    gender_name = (
+        "رجل"
+        if gender == "him"
+        else "امرأة"
+    )
+
+    wardrobe_lines = []
+
+    for item in items:
+
+        wardrobe_lines.append(
+            f"- {item['category']} | اللون: {item['color']}"
+        )
+
+    wardrobe_text = "\n".join(
+        wardrobe_lines
+    )
+
+    prompt = f"""
+أنت مساعد متخصص بتنسيق الملابس.
+
+المستخدم يريد تنسيق ملابس لـ {gender_name}.
+
+هذه هي الملابس التي يملكها المستخدم فعلاً:
+
+{wardrobe_text}
+
+مهم جداً:
+- استخدم فقط القطع الموجودة في القائمة.
+- لا تخترع قطعة ملابس غير موجودة.
+- لا تضف لوناً غير اللون المسجل للقطعة.
+- يمكنك عدم استخدام بعض القطع إذا لم تكن مناسبة.
+- كوّن تنسيقاً عملياً ومتناسقاً.
+- إذا لم توجد قطع كافية، قل ذلك بوضوح ولا تخترع قطعاً.
+- لا تذكر أسعاراً أو ماركات غير موجودة.
+- لا تقترح شراء ملابس.
+- أجب بالعربية.
+- اجعل النتيجة مختصرة ومرتبة.
+
+أعطني:
+
+👕 التنسيق المقترح
+
+- القطعة:
+- اللون:
+- القطعة:
+- اللون:
+
+ثم:
+
+🎨 لماذا هذا التنسيق؟
+سطران أو ثلاثة فقط.
+
+ثم:
+
+👟 الإكسسوارات أو الحذاء:
+استخدم فقط ما هو موجود في القائمة، وإذا لم يوجد اكتب:
+لا توجد قطعة مناسبة محفوظة.
+
+مهم:
+لا تستخدم أي قطعة غير موجودة في القائمة.
+"""
+
+    interaction = image_client.interactions.create(
+        model=OUTFIT_MODEL,
+        input=prompt,
+        generation_config={
+            "thinking_level": "minimal",
+            "max_output_tokens": 900,
+        },
+    )
+
+    if not interaction:
+        raise RuntimeError(
+            "Gemini أعاد استجابة فارغة."
+        )
+
+    result = getattr(
+        interaction,
+        "output_text",
+        None,
+    )
+
+    if not result:
+        raise RuntimeError(
+            "Gemini لم يرجع تنسيقاً."
+        )
+
+    return result.strip()
+
+
+async def generate_outfit(
+    gender,
+    items,
+):
+
+    return await asyncio.to_thread(
+        _generate_outfit_sync,
+        gender,
+        items,
+    )
+
+
+async def outfit_generate(
+    update,
+    context,
+    gender,
+):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    try:
+
+        items = db.get_wardrobe_items(
+            q.from_user.id,
+            gender,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not load wardrobe for outfit generation."
+        )
+
+        await show(
+            q,
+            "❌ تعذر قراءة ملابسك حالياً.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:{gender}",
+                        )
+                    ]
+                ]
+            ),
+        )
+
+        return
+
+    if not items:
+
+        await show(
+            q,
+            "👕 ما عندك ملابس محفوظة بعد.\n\n"
+            "أضف القطع وألوانها أولاً حتى أقدر "
+            "أسوي لك تنسيق.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "➕ إضافة قطعة",
+                            callback_data=f"outfit:add:{gender}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:{gender}",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+        return
+
+    await show(
+        q,
+        "✨ جاري تنسيق ملابسك...\n\n"
+        "أستخدم فقط الملابس والألوان المحفوظة عندك.",
+    )
+
+    try:
+
+        result = await generate_outfit(
+            gender,
+            items,
+        )
+
+    except Exception as error:
+
+        logger.exception(
+            "Outfit generation failed."
+        )
+
+        error_text = str(error).upper()
+
+        if (
+            "429" in error_text
+            or "RESOURCE_EXHAUSTED" in error_text
+        ):
+
+            message = (
+                "⚠️ تم الوصول إلى حد الطلبات مؤقتاً.\n\n"
+                "انتظر قليلاً وحاول مرة ثانية."
+            )
+
+        elif (
+            "503" in error_text
+            or "UNAVAILABLE" in error_text
+        ):
+
+            message = (
+                "⚠️ Gemini مشغول حالياً.\n\n"
+                "حاول مرة ثانية 🔄"
+            )
+
+        elif (
+            "504" in error_text
+            or "TIMEOUT" in error_text
+            or "DEADLINE_EXCEEDED" in error_text
+        ):
+
+            message = (
+                "⏱️ Gemini تأخر بالاستجابة.\n\n"
+                "حاول مرة ثانية 🔄"
+            )
+
+        else:
+
+            message = (
+                "❌ ما قدرت أجهز تنسيق الملابس حالياً.\n\n"
+                "حاول مرة ثانية 🔄"
+            )
+
+        await show(
+            q,
+            message,
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔄 إعادة التنسيق",
+                            callback_data=f"outfit:generate:{gender}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "👕 ملابسي",
+                            callback_data=f"outfit:list:{gender}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:{gender}",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+        return
+
+    context.user_data[
+        "last_outfit_result"
+    ] = result
+
+    await show(
+        q,
+        result,
+        InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "✨ تنسيق ثاني",
+                        callback_data=f"outfit:generate:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "👕 ملابسي",
+                        callback_data=f"outfit:list:{gender}",
+                    ),
+                    InlineKeyboardButton(
+                        "➕ إضافة قطعة",
+                        callback_data=f"outfit:add:{gender}",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ رجوع",
+                        callback_data=f"outfit:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
 
 
 # ============================================================
@@ -2626,7 +3821,7 @@ async def show_weather(
                     [
                         InlineKeyboardButton(
                             "🏠 القائمة الرئيسية",
-                            callback_data="m",
+                            callback_data="m"
                         )
                     ],
                 ]
@@ -2683,6 +3878,11 @@ async def start(
         None,
     )
 
+    context.user_data.pop(
+        "outfit_await",
+        None,
+    )
+
     await update.message.reply_text(
 
         "🎓 أهلاً وسهلاً بك\n\n"
@@ -2721,6 +3921,11 @@ async def cancel(
 
     context.user_data.pop(
         "ai_challenge",
+        None,
+    )
+
+    context.user_data.pop(
+        "outfit_await",
         None,
     )
 
@@ -2949,6 +4154,34 @@ async def handle_text(
     ):
         return
 
+    text = (
+        update.message.text or ""
+    ).strip()
+
+    if not text:
+        return
+
+    # --------------------------------------------------------
+    # Outfit text input
+    # --------------------------------------------------------
+
+    if context.user_data.get(
+        "outfit_await"
+    ):
+
+        handled = await outfit_save_text(
+            update,
+            context,
+            text,
+        )
+
+        if handled:
+            return
+
+    # --------------------------------------------------------
+    # Existing await handlers
+    # --------------------------------------------------------
+
     aw = context.user_data.get(
         "await"
     )
@@ -2975,13 +4208,6 @@ async def handle_text(
             )
 
             return
-
-    text = (
-        update.message.text or ""
-    ).strip()
-
-    if not text:
-        return
 
     context.user_data[
         "ai_text"
@@ -3181,6 +4407,150 @@ async def callback_router(
         return await show_weather(
             update,
             context,
+        )
+
+    # ========================================================
+    # Outfit
+    # ========================================================
+
+    if data == "outfit":
+
+        return await show_outfit(
+            update,
+            context,
+        )
+
+    if data == "outfit:him":
+
+        return await show_outfit_gender(
+            update,
+            context,
+            "him",
+        )
+
+    if data == "outfit:her":
+
+        return await show_outfit_gender(
+            update,
+            context,
+            "her",
+        )
+
+    if data.startswith("outfit:add:"):
+
+        gender = data.split(
+            ":",
+            2
+        )[2]
+
+        return await outfit_add_start(
+            update,
+            context,
+            gender,
+        )
+
+    if data.startswith("outfit:list:"):
+
+        gender = data.split(
+            ":",
+            2
+        )[2]
+
+        return await outfit_list(
+            update,
+            context,
+            gender,
+        )
+
+    if data.startswith("outfit:manage:"):
+
+        gender = data.split(
+            ":",
+            2
+        )[2]
+
+        return await outfit_manage(
+            update,
+            context,
+            gender,
+        )
+
+    if data.startswith("outfit:delete_menu:"):
+
+        gender = data.split(
+            ":",
+            2
+        )[2]
+
+        return await outfit_delete_menu(
+            update,
+            context,
+            gender,
+        )
+
+    if data.startswith("outfit:delete:"):
+
+        parts = data.split(":")
+
+        if len(parts) != 4:
+            return
+
+        try:
+
+            item_id = int(
+                parts[2]
+            )
+
+        except ValueError:
+
+            return
+
+        gender = parts[3]
+
+        return await outfit_delete(
+            update,
+            context,
+            item_id,
+            gender,
+        )
+
+    if data.startswith("outfit:clear_yes:"):
+
+        gender = data.split(
+            ":",
+            2
+        )[2]
+
+        return await outfit_clear_yes(
+            update,
+            context,
+            gender,
+        )
+
+    if data.startswith("outfit:clear:"):
+
+        gender = data.split(
+            ":",
+            2
+        )[2]
+
+        return await outfit_clear(
+            update,
+            context,
+            gender,
+        )
+
+    if data.startswith("outfit:generate:"):
+
+        gender = data.split(
+            ":",
+            2
+        )[2]
+
+        return await outfit_generate(
+            update,
+            context,
+            gender,
         )
 
     # ========================================================
