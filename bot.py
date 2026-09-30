@@ -10,6 +10,9 @@ import threading
 import json
 import re
 from zoneinfo import ZoneInfo
+from urllib.parse import quote_plus
+
+import httpx
 
 from telegram import (
     Update,
@@ -37,8 +40,6 @@ import seed
 import timetable
 import webapp
 import weather
-import library
-import character
 import outfit
 
 from config import BOT_TOKEN, logger
@@ -56,6 +57,194 @@ from ui import (
 )
 
 from ai import ask_ai
+
+
+# ============================================================
+# Built-in Book Library + Characters
+# ============================================================
+
+class _LibraryModule:
+
+    NOOR_BASE = "https://www.noor-book.com/"
+    SHAMELA_BASE = "https://shamela.ws/"
+
+@staticmethod
+    def _clean_query(query):
+        return " ".join(str(query or "").strip().split())[:300]
+
+@classmethod
+    def build_noor_search_url(cls, query):
+        query = cls._clean_query(query)
+        return f"{cls.NOOR_BASE}?q={quote_plus(query)}"
+
+@classmethod
+    def build_shamela_search_url(cls, query):
+        query = cls._clean_query(query)
+        return f"{cls.SHAMELA_BASE}search?query={quote_plus(query)}"
+
+@classmethod
+    def format_search_result(cls, query):
+        query = cls._clean_query(query) or "غير محدد"
+        return (
+            "📚 <b>مكتبة الكتب</b>\n\n"
+            f"🔎 البحث عن: <b>{query}</b>\n\n"
+            "وجدت لك روابط بحث مباشرة في مصادر الكتب.\n"
+            "يمكنك فتح المصدر واختيار النسخة المتاحة هناك.\n\n"
+            "📌 إذا كانت نسخة PDF محمية بحقوق النشر، استخدم النسخة التي يتيحها المصدر قانونياً."
+        )
+
+
+library = _LibraryModule()
+
+
+class _CharacterModule:
+
+    CHARACTER_MODEL = os.getenv("CHARACTER_MODEL", "gemini-2.5-flash").strip()
+
+    KNOWN = {
+        "الجاحظ": {
+            "name": "أبو عثمان عمرو بن بحر الجاحظ",
+            "era": "القرن الثالث الهجري / العصر العباسي",
+            "field": "الأدب واللغة والنقد والفكر",
+            "summary": "أديب ومفكر عربي من أبرز أعلام النثر العربي في العصر العباسي، عُرف بأسلوبه في الكتابة وملاحظاته في اللغة والأدب والمجتمع.",
+            "works": "البيان والتبيين، الحيوان، البخلاء.",
+        },
+        "المتنبي": {
+            "name": "أبو الطيب أحمد بن الحسين المتنبي",
+            "era": "القرن الرابع الهجري / العصر العباسي",
+            "field": "الشعر واللغة",
+            "summary": "من أشهر شعراء العربية، امتاز شعره بقوة اللغة والحكمة والصور البلاغية، وكان له أثر واسع في تاريخ الشعر العربي.",
+            "works": "ديوان المتنبي، ومن أشهر قصائده قصائد المدح والحكمة والرثاء.",
+        },
+        "سيبويه": {
+            "name": "أبو بشر عمرو بن عثمان سيبويه",
+            "era": "القرن الثاني الهجري",
+            "field": "النحو واللغة العربية",
+            "summary": "من أعلام النحو العربي، وصاحب الكتاب الذي صار من أهم المصادر المؤسسة للدراسات النحوية العربية.",
+            "works": "الكتاب.",
+        },
+        "الخليل بن أحمد": {
+            "name": "الخليل بن أحمد الفراهيدي",
+            "era": "القرن الثاني الهجري",
+            "field": "اللغة والعَروض والمعاجم",
+            "summary": "عالم لغوي بارز أسهم في تأسيس علم العَروض، وكان له دور مهم في دراسة العربية ومعجم العين.",
+            "works": "كتاب العين، ونسبة وضع علم العَروض إليه مشهورة في كتب التراث.",
+        },
+        "ابن منظور": {
+            "name": "محمد بن مكرم بن منظور الإفريقي",
+            "era": "القرن السابع والثامن الهجريين",
+            "field": "اللغة والمعاجم",
+            "summary": "لغوي ومصنف اشتهر بجمع المادة اللغوية في معجمه الكبير لسان العرب.",
+            "works": "لسان العرب.",
+        },
+    }
+
+@staticmethod
+    def _key(name):
+        value = re.sub(r"[ًٌٍَُِّْـ]", "", str(name or ""))
+        value = re.sub(r"^(أبو|ابو|الشيخ|الإمام|الامام)\s+", "", value.strip())
+        return value
+
+@classmethod
+    def _known(cls, name):
+        raw = str(name or "").strip()
+        key = cls._key(raw)
+        for k, value in cls.KNOWN.items():
+            if cls._key(k) == key or k in raw or raw in k:
+                return value
+        return None
+
+@staticmethod
+    def _extract_text(data):
+        try:
+            parts = data["candidates"][0]["content"]["parts"]
+            return "".join(p.get("text", "") for p in parts).strip()
+        except Exception:
+            return ""
+
+@classmethod
+    async def _gemini(cls, prompt):
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not api_key:
+            return ""
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{cls.CHARACTER_MODEL}:generateContent"
+        )
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1400},
+        }
+        try:
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                response = await client.post(
+                    url,
+                    params={"key": api_key},
+                    json=payload,
+                )
+                response.raise_for_status()
+                return cls._extract_text(response.json())
+        except Exception:
+            return ""
+
+@classmethod
+    async def get_character(cls, name):
+        name = " ".join(str(name or "").strip().split())[:150]
+        if not name:
+            return False, "❌ اكتب اسم الشخصية أولاً."
+        known = cls._known(name)
+        if known:
+            return True, cls._format_card(known)
+        prompt = f""" أنت مساعد أكاديمي عربي لقسم «سير الأعلام». اكتب نبذة دقيقة ومختصرة عن الشخصية التالية: {name} مهم: - لا تخترع معلومات. - إذا كان الاسم غامضاً أو لا تستطيع تحديد الشخصية بثقة، اذكر أن الاسم غير واضح واطلب تحديد الشخصية. - اجعل الجواب مناسباً للطلاب. - أخرج النص فقط. التنسيق: 🏺 الاسم: 📅 العصر: 📚 المجال: نبذة: ... 🪶 أبرز المؤلفات/الآثار: ... """
+        result = await cls._gemini(prompt)
+        if result:
+            return True, result
+        return False, "❌ لم أتمكن من التحقق من الشخصية حالياً.\n\nاكتب الاسم بصورة أوضح، أو جرّب اسماً آخر."
+
+@classmethod
+    async def get_character_detail(cls, name):
+        name = " ".join(str(name or "").strip().split())[:150]
+        if not name:
+            return "❌ لم يتم تحديد اسم الشخصية."
+        known = cls._known(name)
+        if known:
+            return cls._known_detail(known)
+        prompt = f""" اكتب سيرة أكاديمية عربية منظمة للشخصية: {name} لا تخمّن. إذا كان الاسم غير واضح أو توجد شخصيات متعددة بالاسم، اذكر ذلك واطلب التحديد. غطِّ فقط ما يمكن دعمه بثقة، وبالعناوين التالية: 📚 حياته وآثاره 🧬 نشأته ونسبه 🎓 طلبه للعلم وشيوخه 📚 علمه ومكانته 🪶 أبرز مؤلفاته 👥 تلاميذه ومن تأثر بهم 🏛️ أهم محطات حياته 💡 أبرز أفكاره وإسهاماته 🕊️ وفاته 📌 أثره في اللغة والأدب 📚 مصادر ومراجع للتوسع اكتب بلغة عربية واضحة ومناسبة للطلاب، ولا تضع روابط مخترعة. """
+        result = await cls._gemini(prompt)
+        if result:
+            return result
+        return "❌ تعذر إعداد السيرة التفصيلية حالياً. حاول مرة ثانية بعد قليل."
+
+@staticmethod
+    def _format_card(item):
+        return (
+            "🏺 <b>سيرة علم</b>\n\n"
+            f"👤 <b>الاسم:</b> {item['name']}\n"
+            f"📅 <b>العصر:</b> {item['era']}\n"
+            f"📚 <b>المجال:</b> {item['field']}\n\n"
+            f"📝 <b>نبذة:</b>\n{item['summary']}\n\n"
+            f"🪶 <b>أبرز الآثار:</b>\n{item['works']}"
+        )
+
+@staticmethod
+    def _known_detail(item):
+        return (
+            "📚 <b>حياته وآثاره</b>\n\n"
+            f"👤 <b>{item['name']}</b>\n\n"
+            f"🧬 <b>نشأته ونسبه</b>\n{item['name']} من أعلام التراث العربي، وتُذكر ترجمته في مصادر التراجم واللغة والأدب.\n\n"
+            "🎓 <b>طلبه للعلم وشيوخه</b>\nارتبط تكوينه العلمي ببيئة العلم والرواية في عصره، وتفاصيل الشيوخ والتلاميذ تُراجع في كتب التراجم المتخصصة.\n\n"
+            f"📚 <b>علمه ومكانته</b>\nبرز في مجال {item['field']}، واشتهر بأثره في الدرس العربي.\n\n"
+            f"🪶 <b>أبرز مؤلفاته</b>\n{item['works']}\n\n"
+            "👥 <b>تلاميذه ومن تأثر بهم</b>\nتُبحث هذه التفاصيل في مصادر التراجم والدراسات المتخصصة.\n\n"
+            "🏛️ <b>أهم محطات حياته</b>\nتُراجع في كتب الطبقات والتراجم الخاصة بعصره.\n\n"
+            "💡 <b>أبرز أفكاره وإسهاماته</b>\nأسهم في المجال الذي عُرف به، وترك أثراً في التراث العربي.\n\n"
+            "🕊️ <b>وفاته</b>\nتُراجع سنة الوفاة وتفاصيلها في المصادر المتخصصة لتجنب نقل تاريخ غير موثق.\n\n"
+            "📌 <b>أثره في اللغة والأدب</b>\nيمثل جزءاً مهماً من تاريخ الدراسات العربية والأدب بحسب تخصصه.\n\n"
+            "📚 <b>مصادر ومراجع للتوسع</b>\nيمكن الرجوع إلى كتب التراجم وطبقات العلماء، وإلى مكتبة نور والمكتبة الشاملة للبحث عن المصادر والنصوص الأصلية."
+        )
+
+
+character = _CharacterModule()
 
 
 # ============================================================
