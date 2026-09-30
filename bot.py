@@ -37,6 +37,9 @@ import seed
 import timetable
 import webapp
 import weather
+import library
+import character
+import outfit
 
 from config import BOT_TOKEN, logger
 
@@ -45,7 +48,7 @@ from ui import (
     ai_markup,
     is_admin,
     is_subscribed,
-    main_menu,
+    main_menu as ui_main_menu,
     send_summary,
     show,
     sub_markup,
@@ -53,6 +56,32 @@ from ui import (
 )
 
 from ai import ask_ai
+
+
+# ============================================================
+# Main Menu Extensions
+# ============================================================
+
+def main_menu(user_id):
+
+    markup = ui_main_menu(user_id)
+
+    try:
+        rows = [list(row) for row in markup.inline_keyboard]
+        rows.append([
+            InlineKeyboardButton(
+                "📚 مكتبة الكتب",
+                callback_data="library",
+            ),
+            InlineKeyboardButton(
+                "🏺 سير الأعلام",
+                callback_data="character",
+            ),
+        ])
+        return InlineKeyboardMarkup(rows)
+    except Exception:
+        logger.exception("Could not extend main menu.")
+        return markup
 
 
 # ============================================================
@@ -649,11 +678,7 @@ async def safe_answer(q):
         pass
 
 
-async def send_long_message(
-    message,
-    text,
-    reply_markup=None,
-):
+async def send_long_message( message, text, reply_markup=None, ):
 
     if not text:
         return
@@ -694,10 +719,7 @@ async def send_long_message(
 # Access / Subscription
 # ============================================================
 
-async def check_access(
-    update,
-    context,
-):
+async def check_access( update, context, ):
 
     user = update.effective_user
 
@@ -865,10 +887,7 @@ def outfit_manage_markup(gender):
     )
 
 
-async def show_outfit(
-    update,
-    context,
-):
+async def show_outfit( update, context, ):
 
     q = update.callback_query
 
@@ -891,11 +910,7 @@ async def show_outfit(
     )
 
 
-async def show_outfit_gender(
-    update,
-    context,
-    gender,
-):
+async def show_outfit_gender( update, context, gender, ):
 
     q = update.callback_query
 
@@ -939,11 +954,7 @@ async def show_outfit_gender(
     )
 
 
-async def outfit_add_start(
-    update,
-    context,
-    gender,
-):
+async def outfit_add_start( update, context, gender, ):
 
     q = update.callback_query
 
@@ -1041,11 +1052,7 @@ def parse_outfit_item(text):
     return category, color
 
 
-async def outfit_save_text(
-    update,
-    context,
-    text,
-):
+async def outfit_save_text( update, context, text, ):
 
     message = update.message
 
@@ -1153,11 +1160,7 @@ async def outfit_save_text(
     return True
 
 
-async def outfit_list(
-    update,
-    context,
-    gender,
-):
+async def outfit_list( update, context, gender, ):
 
     q = update.callback_query
 
@@ -1288,11 +1291,7 @@ async def outfit_list(
     )
 
 
-async def outfit_manage(
-    update,
-    context,
-    gender,
-):
+async def outfit_manage( update, context, gender, ):
 
     q = update.callback_query
 
@@ -1315,11 +1314,7 @@ async def outfit_manage(
     )
 
 
-async def outfit_delete_menu(
-    update,
-    context,
-    gender,
-):
+async def outfit_delete_menu( update, context, gender, ):
 
     q = update.callback_query
 
@@ -1405,12 +1400,7 @@ async def outfit_delete_menu(
     )
 
 
-async def outfit_delete(
-    update,
-    context,
-    item_id,
-    gender,
-):
+async def outfit_delete( update, context, item_id, gender, ):
 
     q = update.callback_query
 
@@ -1429,6 +1419,7 @@ async def outfit_delete(
 
         item = db.get_wardrobe_item(
             item_id,
+            q.from_user.id,
         )
 
         if not item:
@@ -1453,6 +1444,7 @@ async def outfit_delete(
 
         db.delete_wardrobe_item(
             item_id,
+            q.from_user.id,
         )
 
     except Exception:
@@ -1506,11 +1498,7 @@ async def outfit_delete(
     )
 
 
-async def outfit_clear(
-    update,
-    context,
-    gender,
-):
+async def outfit_clear( update, context, gender, ):
 
     q = update.callback_query
 
@@ -1548,11 +1536,7 @@ async def outfit_clear(
     )
 
 
-async def outfit_clear_yes(
-    update,
-    context,
-    gender,
-):
+async def outfit_clear_yes( update, context, gender, ):
 
     q = update.callback_query
 
@@ -1619,10 +1603,7 @@ async def outfit_clear_yes(
     )
 
 
-def _generate_outfit_sync(
-    gender,
-    items,
-):
+def _generate_outfit_sync( gender, items, ):
 
     if not GEMINI_API_KEY:
         raise RuntimeError(
@@ -1657,50 +1638,7 @@ def _generate_outfit_sync(
         wardrobe_lines
     )
 
-    prompt = f"""
-أنت مساعد متخصص بتنسيق الملابس.
-
-المستخدم يريد تنسيق ملابس لـ {gender_name}.
-
-هذه هي الملابس التي يملكها المستخدم فعلاً:
-
-{wardrobe_text}
-
-مهم جداً:
-- استخدم فقط القطع الموجودة في القائمة.
-- لا تخترع قطعة ملابس غير موجودة.
-- لا تضف لوناً غير اللون المسجل للقطعة.
-- يمكنك عدم استخدام بعض القطع إذا لم تكن مناسبة.
-- كوّن تنسيقاً عملياً ومتناسقاً.
-- إذا لم توجد قطع كافية، قل ذلك بوضوح ولا تخترع قطعاً.
-- لا تذكر أسعاراً أو ماركات غير موجودة.
-- لا تقترح شراء ملابس.
-- أجب بالعربية.
-- اجعل النتيجة مختصرة ومرتبة.
-
-أعطني:
-
-👕 التنسيق المقترح
-
-- القطعة:
-- اللون:
-- القطعة:
-- اللون:
-
-ثم:
-
-🎨 لماذا هذا التنسيق؟
-سطران أو ثلاثة فقط.
-
-ثم:
-
-👟 الإكسسوارات أو الحذاء:
-استخدم فقط ما هو موجود في القائمة، وإذا لم يوجد اكتب:
-لا توجد قطعة مناسبة محفوظة.
-
-مهم:
-لا تستخدم أي قطعة غير موجودة في القائمة.
-"""
+    prompt = f""" أنت مساعد متخصص بتنسيق الملابس. المستخدم يريد تنسيق ملابس لـ {gender_name}. هذه هي الملابس التي يملكها المستخدم فعلاً: {wardrobe_text} مهم جداً: - استخدم فقط القطع الموجودة في القائمة. - لا تخترع قطعة ملابس غير موجودة. - لا تضف لوناً غير اللون المسجل للقطعة. - يمكنك عدم استخدام بعض القطع إذا لم تكن مناسبة. - كوّن تنسيقاً عملياً ومتناسقاً. - إذا لم توجد قطع كافية، قل ذلك بوضوح ولا تخترع قطعاً. - لا تذكر أسعاراً أو ماركات غير موجودة. - لا تقترح شراء ملابس. - أجب بالعربية. - اجعل النتيجة مختصرة ومرتبة. أعطني: 👕 التنسيق المقترح - القطعة: - اللون: - القطعة: - اللون: ثم: 🎨 لماذا هذا التنسيق؟ سطران أو ثلاثة فقط. ثم: 👟 الإكسسوارات أو الحذاء: استخدم فقط ما هو موجود في القائمة، وإذا لم يوجد اكتب: لا توجد قطعة مناسبة محفوظة. مهم: لا تستخدم أي قطعة غير موجودة في القائمة. """
 
     interaction = image_client.interactions.create(
         model=OUTFIT_MODEL,
@@ -1730,10 +1668,7 @@ def _generate_outfit_sync(
     return result.strip()
 
 
-async def generate_outfit(
-    gender,
-    items,
-):
+async def generate_outfit( gender, items, ):
 
     return await asyncio.to_thread(
         _generate_outfit_sync,
@@ -1742,11 +1677,7 @@ async def generate_outfit(
     )
 
 
-async def outfit_generate(
-    update,
-    context,
-    gender,
-):
+async def outfit_generate( update, context, gender, ):
 
     q = update.callback_query
 
@@ -1826,10 +1757,13 @@ async def outfit_generate(
 
     try:
 
-        result = await generate_outfit(
+        ok, result = await outfit.generate_outfit(
+            q.from_user.id,
             gender,
-            items,
         )
+
+        if not ok:
+            raise RuntimeError(result)
 
     except Exception as error:
 
@@ -1946,9 +1880,7 @@ async def outfit_generate(
 # Voice Transcription
 # ============================================================
 
-def _transcribe_voice_file(
-    file_path
-):
+def _transcribe_voice_file( file_path ):
 
     if not GEMINI_API_KEY:
 
@@ -2030,9 +1962,7 @@ def _transcribe_voice_file(
     return result.strip()
 
 
-async def transcribe_voice(
-    file_path
-):
+async def transcribe_voice( file_path ):
 
     return await asyncio.to_thread(
         _transcribe_voice_file,
@@ -2044,10 +1974,7 @@ async def transcribe_voice(
 # Voice Handler
 # ============================================================
 
-async def handle_voice(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+async def handle_voice( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
 
     if not update.message:
         return
@@ -2253,10 +2180,7 @@ async def handle_voice(
 # Image OCR
 # ============================================================
 
-def _extract_text_from_image_file(
-    file_path,
-    mime_type,
-):
+def _extract_text_from_image_file( file_path, mime_type, ):
 
     if not GEMINI_API_KEY:
 
@@ -2270,21 +2194,7 @@ def _extract_text_from_image_file(
             "تعذر إنشاء اتصال Gemini للصور."
         )
 
-    prompt = """
-استخرج النص الموجود داخل الصورة فقط.
-
-مهم جداً:
-- الصورة قد تحتوي على نص عربي أو إنكليزي أو الاثنين معاً.
-- حافظ على الكلمات كما تظهر في الصورة قدر الإمكان.
-- لا تشرح الصورة.
-- لا تلخص.
-- لا تضف أي كلام من عندك.
-- لا تضع مقدمة مثل "النص هو".
-- إذا كان هناك أكثر من سطر، حافظ على ترتيب الأسطر.
-- إذا كانت هناك أسئلة أو أبيات أو جمل، اكتبها كما تظهر.
-- إذا كانت هناك كلمات غير واضحة، حاول قراءتها من السياق، وإذا تعذر ذلك اتركها كما تبدو بدلاً من اختراع كلمة.
-- أعد النص المستخرج فقط.
-"""
+    prompt = """ استخرج النص الموجود داخل الصورة فقط. مهم جداً: - الصورة قد تحتوي على نص عربي أو إنكليزي أو الاثنين معاً. - حافظ على الكلمات كما تظهر في الصورة قدر الإمكان. - لا تشرح الصورة. - لا تلخص. - لا تضف أي كلام من عندك. - لا تضع مقدمة مثل "النص هو". - إذا كان هناك أكثر من سطر، حافظ على ترتيب الأسطر. - إذا كانت هناك أسئلة أو أبيات أو جمل، اكتبها كما تظهر. - إذا كانت هناك كلمات غير واضحة، حاول قراءتها من السياق، وإذا تعذر ذلك اتركها كما تبدو بدلاً من اختراع كلمة. - أعد النص المستخرج فقط. """
 
     logger.info(
         "Uploading image to Gemini: %s",
@@ -2373,10 +2283,7 @@ def _extract_text_from_image_file(
     return result.strip()
 
 
-async def extract_text_from_image(
-    file_path,
-    mime_type,
-):
+async def extract_text_from_image( file_path, mime_type, ):
 
     return await asyncio.to_thread(
         _extract_text_from_image_file,
@@ -2389,10 +2296,7 @@ async def extract_text_from_image(
 # Image Handler
 # ============================================================
 
-async def handle_image(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+async def handle_image( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
 
     if not update.message:
         return
@@ -2683,60 +2587,7 @@ def _generate_grammar_question():
             "تعذر الاتصال بخدمة Gemini."
         )
 
-    prompt = """
-أنت مولّد أسئلة لتحدي قواعد اللغة العربية للطلاب.
-
-أنشئ سؤال قواعد عربية واحد فقط.
-
-الشروط:
-- السؤال يجب أن يكون واضحاً ومناسباً للطالب.
-- استخدم قواعد عربية مدرسية صحيحة.
-- اجعل السؤال متوسط الصعوبة.
-- يجب أن يحتوي على 4 خيارات فقط.
-- خيار واحد فقط صحيح.
-- لا تجعل أكثر من خيار صحيحاً.
-- لا تستخدم معلومات غامضة أو خلافية.
-- بعد السؤال، اكتب شرحاً قصيراً جداً لسبب صحة الإجابة.
-
-أمثلة لأنواع الأسئلة:
-- تحديد المفعول به.
-- تحديد الفاعل.
-- تحديد المبتدأ والخبر.
-- علامة الإعراب.
-- نوع الجملة.
-- كان وأخواتها.
-- إن وأخواتها.
-- النعت.
-- الحال.
-- التمييز.
-- المفعول المطلق.
-- المفعول لأجله.
-- جمع المذكر السالم.
-- المثنى.
-- الأسماء الخمسة.
-
-أعد النتيجة بصيغة JSON فقط، بدون أي كلام خارج JSON.
-
-الشكل المطلوب بالضبط:
-
-{
-  "question": "السؤال هنا",
-  "options": [
-    "الخيار الأول",
-    "الخيار الثاني",
-    "الخيار الثالث",
-    "الخيار الرابع"
-  ],
-  "correct": 0,
-  "explanation": "شرح مختصر."
-}
-
-مهم:
-- correct يجب أن يكون رقماً من 0 إلى 3.
-- options يجب أن تحتوي على 4 عناصر بالضبط.
-- لا تستخدم Markdown.
-- لا تضع ```json.
-"""
+    prompt = """ أنت مولّد أسئلة لتحدي قواعد اللغة العربية للطلاب. أنشئ سؤال قواعد عربية واحد فقط. الشروط: - السؤال يجب أن يكون واضحاً ومناسباً للطالب. - استخدم قواعد عربية مدرسية صحيحة. - اجعل السؤال متوسط الصعوبة. - يجب أن يحتوي على 4 خيارات فقط. - خيار واحد فقط صحيح. - لا تجعل أكثر من خيار صحيحاً. - لا تستخدم معلومات غامضة أو خلافية. - بعد السؤال، اكتب شرحاً قصيراً جداً لسبب صحة الإجابة. أمثلة لأنواع الأسئلة: - تحديد المفعول به. - تحديد الفاعل. - تحديد المبتدأ والخبر. - علامة الإعراب. - نوع الجملة. - كان وأخواتها. - إن وأخواتها. - النعت. - الحال. - التمييز. - المفعول المطلق. - المفعول لأجله. - جمع المذكر السالم. - المثنى. - الأسماء الخمسة. أعد النتيجة بصيغة JSON فقط، بدون أي كلام خارج JSON. الشكل المطلوب بالضبط: { "question": "السؤال هنا", "options": [ "الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع" ], "correct": 0, "explanation": "شرح مختصر." } مهم: - correct يجب أن يكون رقماً من 0 إلى 3. - options يجب أن تحتوي على 4 عناصر بالضبط. - لا تستخدم Markdown. - لا تضع ```json. """
 
     logger.info(
         "Generating grammar challenge question..."
@@ -2924,11 +2775,7 @@ def grammar_challenge_markup():
 # Send Grammar Challenge Question
 # ============================================================
 
-async def send_grammar_challenge_question(
-    q,
-    context,
-    first=False,
-):
+async def send_grammar_challenge_question( q, context, first=False, ):
 
     challenge = context.user_data.get(
         "ai_challenge"
@@ -3107,10 +2954,7 @@ async def send_grammar_challenge_question(
 # Start Grammar Challenge
 # ============================================================
 
-async def start_grammar_challenge(
-    update,
-    context,
-):
+async def start_grammar_challenge( update, context, ):
 
     q = update.callback_query
 
@@ -3156,11 +3000,7 @@ async def start_grammar_challenge(
 # Grammar Challenge Answer
 # ============================================================
 
-async def handle_grammar_challenge_answer(
-    update,
-    context,
-    answer_index,
-):
+async def handle_grammar_challenge_answer( update, context, answer_index, ):
 
     q = update.callback_query
 
@@ -3531,10 +3371,7 @@ async def handle_grammar_challenge_answer(
 # Cancel Grammar Challenge
 # ============================================================
 
-async def cancel_grammar_challenge(
-    update,
-    context,
-):
+async def cancel_grammar_challenge( update, context, ):
 
     q = update.callback_query
 
@@ -3625,10 +3462,7 @@ def rules_menu_markup():
     return InlineKeyboardMarkup(rows)
 
 
-async def show_rules_menu(
-    update,
-    context,
-):
+async def show_rules_menu( update, context, ):
 
     q = update.callback_query
 
@@ -3657,11 +3491,7 @@ async def show_rules_menu(
     )
 
 
-async def show_rule(
-    update,
-    context,
-    key,
-):
+async def show_rule( update, context, key, ):
 
     q = update.callback_query
 
@@ -3749,10 +3579,7 @@ async def show_rule(
 # Weather - Kirkuk
 # ============================================================
 
-async def show_weather(
-    update,
-    context,
-):
+async def show_weather( update, context, ):
 
     q = update.callback_query
 
@@ -3833,10 +3660,7 @@ async def show_weather(
 # Start
 # ============================================================
 
-async def start(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+async def start( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
 
     user = update.effective_user
 
@@ -3883,6 +3707,16 @@ async def start(
         None,
     )
 
+    context.user_data.pop(
+        "library_await",
+        None,
+    )
+
+    context.user_data.pop(
+        "character_await",
+        None,
+    )
+
     await update.message.reply_text(
 
         "🎓 أهلاً وسهلاً بك\n\n"
@@ -3899,10 +3733,7 @@ async def start(
 # Cancel
 # ============================================================
 
-async def cancel(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+async def cancel( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
 
     context.user_data.pop(
         "await",
@@ -3944,10 +3775,7 @@ async def cancel(
 # Subscription Verification
 # ============================================================
 
-async def verify_subscription(
-    q,
-    context,
-):
+async def verify_subscription( q, context, ):
 
     await safe_answer(q)
 
@@ -4007,10 +3835,7 @@ async def verify_subscription(
 # Main Menu
 # ============================================================
 
-async def show_main_menu(
-    update,
-    context,
-):
+async def show_main_menu( update, context, ):
 
     q = update.callback_query
 
@@ -4042,11 +3867,7 @@ async def show_main_menu(
 # AI Handler
 # ============================================================
 
-async def handle_ai(
-    update,
-    context,
-    mode,
-):
+async def handle_ai( update, context, mode, ):
 
     q = update.callback_query
 
@@ -4140,10 +3961,7 @@ async def handle_ai(
 # Text Handler
 # ============================================================
 
-async def handle_text(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+async def handle_text( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
 
     if not update.message:
         return
@@ -4159,6 +3977,93 @@ async def handle_text(
     ).strip()
 
     if not text:
+        return
+
+    # --------------------------------------------------------
+    # Book Library text input
+    # --------------------------------------------------------
+
+    if context.user_data.get("library_await"):
+
+        context.user_data.pop("library_await", None)
+
+        query = text
+        await update.message.reply_text(
+            library.format_search_result(query),
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "📖 البحث في مكتبة نور",
+                        url=library.build_noor_search_url(query),
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "📚 البحث في المكتبة الشاملة",
+                        url=library.build_shamela_search_url(query),
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🔎 بحث عن كتاب آخر",
+                        callback_data="library",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🏠 القائمة الرئيسية",
+                        callback_data="m",
+                    ),
+                ],
+            ]),
+        )
+        return
+
+    # --------------------------------------------------------
+    # Character Biography text input
+    # --------------------------------------------------------
+
+    if context.user_data.get("character_await"):
+
+        context.user_data.pop("character_await", None)
+
+        await update.message.reply_text(
+            "⏳ جاري إعداد نبذة عن الشخصية..."
+        )
+
+        ok, result = await character.get_character(text)
+
+        context.user_data["character_name"] = text[:150]
+
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    "📚 حياته وآثاره",
+                    callback_data="character:detail",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔎 بحث عن شخصية أخرى",
+                    callback_data="character",
+                ),
+                InlineKeyboardButton(
+                    "📖 الكتب",
+                    callback_data="library",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🏠 القائمة الرئيسية",
+                    callback_data="m",
+                ),
+            ],
+        ]
+
+        await update.message.reply_text(
+            result,
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
         return
 
     # --------------------------------------------------------
@@ -4227,10 +4132,7 @@ async def handle_text(
 # Document Handler
 # ============================================================
 
-async def handle_document(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+async def handle_document( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
 
     if not update.message:
         return
@@ -4280,10 +4182,7 @@ async def handle_document(
 # Callback Router
 # ============================================================
 
-async def callback_router(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
 
     q = update.callback_query
 
@@ -4407,6 +4306,98 @@ async def callback_router(
         return await show_weather(
             update,
             context,
+        )
+
+    # ========================================================
+    # Book Library
+    # ========================================================
+
+    if data == "library":
+
+        await safe_answer(q)
+        context.user_data["library_await"] = True
+
+        return await show(
+            q,
+            "📚 مكتبة الكتب\n\n"
+            "اكتب اسم الكتاب أو اسم المؤلف، وسأجهز لك روابط البحث في المكتبة الشاملة ومكتبة نور.\n\n"
+            "📌 إذا كانت هناك نسخة PDF متاحة قانونياً من المصدر، استخدم رابط التحميل الذي يتيحه المصدر.",
+            InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ إلغاء", callback_data="m")],
+            ]),
+        )
+
+    # ========================================================
+    # Character Biography - Detailed Life
+    # ========================================================
+
+    if data == "character:detail":
+
+        await safe_answer(q)
+
+        name = str(context.user_data.get("character_name", "")).strip()
+        if not name:
+            return await show(
+                q,
+                "❌ لم أتمكن من تحديد اسم الشخصية.",
+                InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ رجوع", callback_data="character")]
+                ]),
+            )
+
+        await show(
+            q,
+            "📚 حياته وآثاره\n\n⏳ جاري إعداد السيرة التفصيلية...",
+        )
+
+        ok, result = await character.get_character_detail(name)
+
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    "🔄 إعادة التفاصيل",
+                    callback_data="character:detail",
+                ),
+                InlineKeyboardButton(
+                    "🔎 شخصية أخرى",
+                    callback_data="character",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "📖 الكتب",
+                    callback_data="library",
+                ),
+                InlineKeyboardButton(
+                    "🏠 الرئيسية",
+                    callback_data="m",
+                ),
+            ],
+        ]
+
+        return await show(
+            q,
+            result,
+            InlineKeyboardMarkup(buttons),
+        )
+
+    # ========================================================
+    # Character Biography
+    # ========================================================
+
+    if data == "character":
+
+        await safe_answer(q)
+        context.user_data["character_await"] = True
+
+        return await show(
+            q,
+            "🏺 سير الأعلام\n\n"
+            "اكتب اسم الشخصية، وسأعرض لك نبذة موثقة قدر الإمكان عن حياتها ومكانتها وآثارها.\n\n"
+            "بعد ظهور النبذة ستجد زر 📚 حياته وآثاره للتوسع في السيرة.",
+            InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ إلغاء", callback_data="m")],
+            ]),
         )
 
     # ========================================================
@@ -4977,10 +4968,7 @@ async def callback_router(
 # Error Handler
 # ============================================================
 
-async def error_handler(
-    update,
-    context,
-):
+async def error_handler( update, context, ):
 
     logger.exception(
         "Unhandled exception:",
