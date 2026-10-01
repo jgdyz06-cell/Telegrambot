@@ -82,15 +82,52 @@ class _LibraryModule:
         return f"{cls.SHAMELA_BASE}search?query={quote_plus(query)}"
 
     @classmethod
-    def format_search_result(cls, query):
-        query = cls._clean_query(query) or "غير محدد"
-        return (
-            "📚 <b>مكتبة الكتب</b>\n\n"
-            f"🔎 البحث عن: <b>{query}</b>\n\n"
-            "وجدت لك روابط بحث مباشرة في مصادر الكتب.\n"
-            "يمكنك فتح المصدر واختيار النسخة المتاحة هناك.\n\n"
-            "📌 إذا كانت نسخة PDF محمية بحقوق النشر، استخدم النسخة التي يتيحها المصدر قانونياً."
+    async def find_book(cls, query):
+        """البحث عن الكتاب نفسه وإرجاع رابط مباشر لصفحته، وليس صفحة المكتبة."""
+        query = cls._clean_query(query)
+        if not query:
+            return False, "❌ اكتب اسم الكتاب أولاً.", None
+
+        url = "https://www.googleapis.com/books/v1/volumes"
+        params = {
+            "q": f'intitle:"{query}"',
+            "maxResults": 8,
+            "printType": "books",
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+        except Exception:
+            return False, "❌ تعذر البحث عن الكتاب حالياً. حاول مرة ثانية.", None
+
+        items = data.get("items") or []
+        if not items:
+            return False, f"❌ ما لقيت كتاباً مطابقاً لـ «{query}» حالياً.", None
+
+        best = items[0].get("volumeInfo") or {}
+        title = str(best.get("title") or query).strip()
+        authors = ", ".join(best.get("authors") or [])
+        direct_url = (
+            best.get("webReaderLink")
+            or best.get("infoLink")
         )
+
+        if not direct_url:
+            volume_id = str(items[0].get("id") or "").strip()
+            if volume_id:
+                direct_url = f"https://books.google.com/books?id={quote_plus(volume_id)}"
+
+        if not direct_url:
+            return False, f"❌ وجدت «{title}» لكن ما توفر رابط مباشر لصفحته.", None
+
+        text = f"📖 <b>{title}</b>"
+        if authors:
+            text += f"\n\n✍️ المؤلف: {authors}"
+        text += "\n\nاضغط الزر لفتح صفحة الكتاب مباشرة."
+        return True, text, direct_url
 
 
 library = _LibraryModule()
@@ -4208,34 +4245,32 @@ async def handle_text( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
         context.user_data.pop("library_await", None)
 
         query = text
+        ok, result, book_url = await library.find_book(query)
+
+        buttons = []
+        if ok and book_url:
+            buttons.append([
+                InlineKeyboardButton(
+                    "📖 فتح الكتاب مباشرة",
+                    url=book_url,
+                )
+            ])
+
+        buttons.append([
+            InlineKeyboardButton(
+                "🔎 بحث عن كتاب آخر",
+                callback_data="library",
+            ),
+            InlineKeyboardButton(
+                "🏠 الرئيسية",
+                callback_data="m",
+            ),
+        ])
+
         await update.message.reply_text(
-            library.format_search_result(query),
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        "📖 البحث في مكتبة نور",
-                        url=library.build_noor_search_url(query),
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "📚 البحث في المكتبة الشاملة",
-                        url=library.build_shamela_search_url(query),
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "🔎 بحث عن كتاب آخر",
-                        callback_data="library",
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        "🏠 القائمة الرئيسية",
-                        callback_data="m",
-                    ),
-                ],
-            ]),
+            result,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="HTML",
         )
         return
 
@@ -4539,9 +4574,9 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
 
         return await show(
             q,
-            "📚 مكتبة الكتب\n\n"
-            "اكتب اسم الكتاب أو اسم المؤلف، وسأجهز لك روابط البحث في المكتبة الشاملة ومكتبة نور.\n\n"
-            "📌 إذا كانت هناك نسخة PDF متاحة قانونياً من المصدر، استخدم رابط التحميل الذي يتيحه المصدر.",
+            "📚 البحث عن كتاب\n\n"
+            "اكتب اسم الكتاب، وسأبحث عن الكتاب نفسه وأعطيك رابطاً مباشراً لصفحته.\n\n"
+            "📌 إذا لم يتوفر رابط مباشر للكتاب، سأخبرك بذلك بدلاً من تحويلك إلى صفحة المكتبة.",
             InlineKeyboardMarkup([
                 [InlineKeyboardButton("❌ إلغاء", callback_data="m")],
             ]),
@@ -4570,7 +4605,7 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
             "📚 حياته وآثاره\n\n⏳ جاري إعداد السيرة التفصيلية...",
         )
 
-        ok, result = await character.get_character_detail(name)
+        result = await character.get_character_detail(name)
 
         buttons = [
             [
