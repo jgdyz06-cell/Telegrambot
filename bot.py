@@ -290,11 +290,11 @@ def main_menu(user_id):
         rows = [list(row) for row in markup.inline_keyboard]
         rows.append([
             InlineKeyboardButton(
-                "📚 مكتبة الكتب",
+                "📚 مَكْتَبَةُ الكُتُبِ",
                 callback_data="library",
             ),
             InlineKeyboardButton(
-                "🏺 سير الأعلام",
+                "🏺 سِيَرُ الأَعْلَامِ",
                 callback_data="character",
             ),
         ])
@@ -302,6 +302,51 @@ def main_menu(user_id):
     except Exception:
         logger.exception("Could not extend main menu.")
         return markup
+
+
+# ============================================================
+# تحسين حركات أزرار الواجهة
+# ============================================================
+
+_BUTTON_DIACRITICS = {
+    "📚 مكتبة الكتب": "📚 مَكْتَبَةُ الكُتُبِ",
+    "🏺 سير الأعلام": "🏺 سِيَرُ الأَعْلَامِ",
+    "🏠 القائمة الرئيسية": "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
+    "⬅️ رجوع": "⬅️ رُجُوع",
+    "❌ إلغاء": "❌ إِلْغَاء",
+    "📖 الكتب": "📖 الكُتُبُ",
+}
+
+def _beautify_markup(markup):
+    try:
+        for row in markup.inline_keyboard:
+            for button in row:
+                text = getattr(button, "text", None)
+                if text in _BUTTON_DIACRITICS:
+                    button.text = _BUTTON_DIACRITICS[text]
+        return markup
+    except Exception:
+        return markup
+
+_ui_main_menu_original = ui_main_menu
+
+def ui_main_menu(user_id):
+    return _beautify_markup(_ui_main_menu_original(user_id))
+
+_ai_markup_original = ai_markup
+
+def ai_markup(*args, **kwargs):
+    return _beautify_markup(_ai_markup_original(*args, **kwargs))
+
+_sub_markup_original = sub_markup
+
+def sub_markup(*args, **kwargs):
+    return _beautify_markup(_sub_markup_original(*args, **kwargs))
+
+_subjects_markup_original = subjects_markup
+
+def subjects_markup(*args, **kwargs):
+    return _beautify_markup(_subjects_markup_original(*args, **kwargs))
 
 
 # ============================================================
@@ -1009,17 +1054,17 @@ def outfit_gender_markup():
         [
             [
                 InlineKeyboardButton(
-                    "🖤 For Him",
+                    "🖤 لِلرِّجَالِ",
                     callback_data="outfit:him",
                 ),
                 InlineKeyboardButton(
-                    "🤍 For Her",
+                    "🤍 لِلنِّسَاءِ",
                     callback_data="outfit:her",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "🏠 القائمة الرئيسية",
+                    "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                     callback_data="m",
                 ),
             ],
@@ -1030,44 +1075,44 @@ def outfit_gender_markup():
 def outfit_menu_markup(gender):
 
     title = (
-        "🖤 For Him"
+        "🖤 لِلرِّجَالِ"
         if gender == "him"
-        else "🤍 For Her"
+        else "🤍 لِلنِّسَاءِ"
     )
 
     return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    "➕ إضافة قطعة",
+                    "➕ إِضَافَةُ قِطْعَةٍ",
                     callback_data=f"outfit:add:{gender}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "👕 ملابسي",
+                    "👕 مَلَابِسِي",
                     callback_data=f"outfit:list:{gender}",
                 ),
                 InlineKeyboardButton(
-                    "✨ نسّق لي",
+                    "✨ نَسِّقْ لِي",
                     callback_data=f"outfit:generate:{gender}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "🗑️ إدارة الملابس",
+                    "🗑️ إِدَارَةُ المَلَابِسِ",
                     callback_data=f"outfit:manage:{gender}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "🔄 تغيير القسم",
+                    "🔄 تَغْيِيرُ القِسْمِ",
                     callback_data="outfit",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "🏠 القائمة الرئيسية",
+                    "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                     callback_data="m",
                 ),
             ],
@@ -1081,25 +1126,25 @@ def outfit_manage_markup(gender):
         [
             [
                 InlineKeyboardButton(
-                    "👕 عرض الملابس",
+                    "👕 عَرْضُ المَلَابِسِ",
                     callback_data=f"outfit:list:{gender}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "🗑️ حذف قطعة",
+                    "🗑️ حَذْفُ قِطْعَةٍ",
                     callback_data=f"outfit:delete_menu:{gender}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "🧹 مسح كل الملابس",
+                    "🧹 مَسْحُ كُلِّ المَلَابِسِ",
                     callback_data=f"outfit:clear:{gender}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "⬅️ رجوع",
+                    "⬅️ رُجُوع",
                     callback_data=f"outfit:{gender}",
                 ),
             ],
@@ -1146,9 +1191,9 @@ async def show_outfit_gender( update, context, gender, ):
         return
 
     if gender == "him":
-        title = "🖤 For Him"
+        title = "🖤 لِلرِّجَالِ"
     elif gender == "her":
-        title = "🤍 For Her"
+        title = "🤍 لِلنِّسَاءِ"
     else:
         return
 
@@ -1197,9 +1242,9 @@ async def outfit_add_start( update, context, gender, ):
     }
 
     title = (
-        "🖤 For Him"
+        "🖤 لِلرِّجَالِ"
         if gender == "him"
-        else "🤍 For Her"
+        else "🤍 لِلنِّسَاءِ"
     )
 
     await q.edit_message_text(
@@ -1215,7 +1260,7 @@ async def outfit_add_start( update, context, gender, ):
             [
                 [
                     InlineKeyboardButton(
-                        "❌ إلغاء",
+                        "❌ إِلْغَاء",
                         callback_data=f"outfit:{gender}",
                     )
                 ],
@@ -1336,9 +1381,9 @@ async def outfit_save_text( update, context, text, ):
         return True
 
     title = (
-        "🖤 For Him"
+        "🖤 لِلرِّجَالِ"
         if gender == "him"
-        else "🤍 For Her"
+        else "🤍 لِلنِّسَاءِ"
     )
 
     await message.reply_text(
@@ -1351,7 +1396,7 @@ async def outfit_save_text( update, context, text, ):
             [
                 [
                     InlineKeyboardButton(
-                        "➕ إضافة قطعة ثانية",
+                        "➕ إِضَافَةُ قِطْعَةٍ ثَانِيَةٍ",
                         callback_data=f"outfit:add:{gender}",
                     )
                 ],
@@ -1363,13 +1408,13 @@ async def outfit_save_text( update, context, text, ):
                 ],
                 [
                     InlineKeyboardButton(
-                        "✨ نسّق لي",
+                        "✨ نَسِّقْ لِي",
                         callback_data=f"outfit:generate:{gender}",
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "⬅️ رجوع",
+                        "⬅️ رُجُوع",
                         callback_data=f"outfit:{gender}",
                     )
                 ],
@@ -1415,7 +1460,7 @@ async def outfit_list( update, context, gender, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "⬅️ رجوع",
+                            "⬅️ رُجُوع",
                             callback_data=f"outfit:{gender}",
                         )
                     ],
@@ -1426,9 +1471,9 @@ async def outfit_list( update, context, gender, ):
         return
 
     title = (
-        "🖤 For Him"
+        "🖤 لِلرِّجَالِ"
         if gender == "him"
-        else "🤍 For Her"
+        else "🤍 لِلنِّسَاءِ"
     )
 
     if not items:
@@ -1444,13 +1489,13 @@ async def outfit_list( update, context, gender, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "➕ إضافة قطعة",
+                            "➕ إِضَافَةُ قِطْعَةٍ",
                             callback_data=f"outfit:add:{gender}",
                         )
                     ],
                     [
                         InlineKeyboardButton(
-                            "⬅️ رجوع",
+                            "⬅️ رُجُوع",
                             callback_data=f"outfit:{gender}",
                         )
                     ],
@@ -1490,19 +1535,19 @@ async def outfit_list( update, context, gender, ):
             [
                 [
                     InlineKeyboardButton(
-                        "✨ نسّق لي",
+                        "✨ نَسِّقْ لِي",
                         callback_data=f"outfit:generate:{gender}",
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "🗑️ إدارة الملابس",
+                        "🗑️ إِدَارَةُ المَلَابِسِ",
                         callback_data=f"outfit:manage:{gender}",
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "⬅️ رجوع",
+                        "⬅️ رُجُوع",
                         callback_data=f"outfit:{gender}",
                     )
                 ],
@@ -1574,7 +1619,7 @@ async def outfit_delete_menu( update, context, gender, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "⬅️ رجوع",
+                            "⬅️ رُجُوع",
                             callback_data=f"outfit:manage:{gender}",
                         )
                     ],
@@ -1591,7 +1636,7 @@ async def outfit_delete_menu( update, context, gender, ):
         item_id = int(item["id"])
 
         label = (
-            f"🗑️ {item['category']} — "
+            f"🗑️ حَذْفٌ: {item['category']} — "
             f"{item['color']}"
         )
 
@@ -1607,7 +1652,7 @@ async def outfit_delete_menu( update, context, gender, ):
     rows.append(
         [
             InlineKeyboardButton(
-                "⬅️ رجوع",
+                "⬅️ رُجُوع",
                 callback_data=f"outfit:manage:{gender}",
             )
         ]
@@ -1650,7 +1695,7 @@ async def outfit_delete( update, context, item_id, gender, ):
                     [
                         [
                             InlineKeyboardButton(
-                                "⬅️ رجوع",
+                                "⬅️ رُجُوع",
                                 callback_data=f"outfit:manage:{gender}",
                             )
                         ]
@@ -1680,7 +1725,7 @@ async def outfit_delete( update, context, item_id, gender, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "⬅️ رجوع",
+                            "⬅️ رُجُوع",
                             callback_data=f"outfit:manage:{gender}",
                         )
                     ]
@@ -1697,19 +1742,19 @@ async def outfit_delete( update, context, item_id, gender, ):
             [
                 [
                     InlineKeyboardButton(
-                        "🗑️ حذف قطعة ثانية",
+                        "🗑️ حَذْفُ قِطْعَةٍ ثَانِيَةٍ",
                         callback_data=f"outfit:delete_menu:{gender}",
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "👕 عرض الملابس",
+                        "👕 عَرْضُ المَلَابِسِ",
                         callback_data=f"outfit:list:{gender}",
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "⬅️ رجوع",
+                        "⬅️ رُجُوع",
                         callback_data=f"outfit:{gender}",
                     )
                 ],
@@ -1741,13 +1786,13 @@ async def outfit_clear( update, context, gender, ):
             [
                 [
                     InlineKeyboardButton(
-                        "🗑️ نعم، احذف الكل",
+                        "🗑️ نَعَمْ، اِحْذِفِ الكُلَّ",
                         callback_data=f"outfit:clear_yes:{gender}",
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "❌ إلغاء",
+                        "❌ إِلْغَاء",
                         callback_data=f"outfit:manage:{gender}",
                     )
                 ],
@@ -1791,7 +1836,7 @@ async def outfit_clear_yes( update, context, gender, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "⬅️ رجوع",
+                            "⬅️ رُجُوع",
                             callback_data=f"outfit:{gender}",
                         )
                     ]
@@ -1808,13 +1853,13 @@ async def outfit_clear_yes( update, context, gender, ):
             [
                 [
                     InlineKeyboardButton(
-                        "➕ إضافة ملابس",
+                        "➕ إِضَافَةُ مَلَابِسَ",
                         callback_data=f"outfit:add:{gender}",
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "⬅️ رجوع",
+                        "⬅️ رُجُوع",
                         callback_data=f"outfit:{gender}",
                     )
                 ],
@@ -1932,7 +1977,7 @@ async def outfit_generate( update, context, gender, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "⬅️ رجوع",
+                            "⬅️ رُجُوع",
                             callback_data=f"outfit:{gender}",
                         )
                     ]
@@ -1953,13 +1998,13 @@ async def outfit_generate( update, context, gender, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "➕ إضافة قطعة",
+                            "➕ إِضَافَةُ قِطْعَةٍ",
                             callback_data=f"outfit:add:{gender}",
                         )
                     ],
                     [
                         InlineKeyboardButton(
-                            "⬅️ رجوع",
+                            "⬅️ رُجُوع",
                             callback_data=f"outfit:{gender}",
                         )
                     ],
@@ -2038,19 +2083,19 @@ async def outfit_generate( update, context, gender, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "🔄 إعادة التنسيق",
+                            "🔄 إِعَادَةُ التَّنْسِيقِ",
                             callback_data=f"outfit:generate:{gender}",
                         )
                     ],
                     [
                         InlineKeyboardButton(
-                            "👕 ملابسي",
+                            "👕 مَلَابِسِي",
                             callback_data=f"outfit:list:{gender}",
                         )
                     ],
                     [
                         InlineKeyboardButton(
-                            "⬅️ رجوع",
+                            "⬅️ رُجُوع",
                             callback_data=f"outfit:{gender}",
                         )
                     ],
@@ -2071,23 +2116,23 @@ async def outfit_generate( update, context, gender, ):
             [
                 [
                     InlineKeyboardButton(
-                        "✨ تنسيق ثاني",
+                        "✨ تَنْسِيقٌ ثَانٍ",
                         callback_data=f"outfit:generate:{gender}",
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "👕 ملابسي",
+                        "👕 مَلَابِسِي",
                         callback_data=f"outfit:list:{gender}",
                     ),
                     InlineKeyboardButton(
-                        "➕ إضافة قطعة",
+                        "➕ إِضَافَةُ قِطْعَةٍ",
                         callback_data=f"outfit:add:{gender}",
                     ),
                 ],
                 [
                     InlineKeyboardButton(
-                        "⬅️ رجوع",
+                        "⬅️ رُجُوع",
                         callback_data=f"outfit:{gender}",
                     )
                 ],
@@ -2983,7 +3028,7 @@ def grammar_challenge_markup():
             ],
             [
                 InlineKeyboardButton(
-                    "❌ إلغاء التحدي",
+                    "❌ إِلْغَاءُ التَّحَدِّي",
                     callback_data="aich:cancel",
                 ),
             ],
@@ -3092,13 +3137,13 @@ async def send_grammar_challenge_question( q, context, first=False, ):
                     [
                         [
                             InlineKeyboardButton(
-                                "🔄 إعادة المحاولة",
+                                "🔄 إِعَادَةُ المُحَاوَلَةِ",
                                 callback_data="aichallenge",
                             )
                         ],
                         [
                             InlineKeyboardButton(
-                                "🏠 القائمة الرئيسية",
+                                "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                                 callback_data="m",
                             )
                         ],
@@ -3250,13 +3295,13 @@ async def handle_grammar_challenge_answer( update, context, answer_index, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "🧠 بدء التحدي",
+                            "🧠 بَدْءُ التَّحَدِّي",
                             callback_data="aichallenge",
                         )
                     ],
                     [
                         InlineKeyboardButton(
-                            "🏠 القائمة الرئيسية",
+                            "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                             callback_data="m",
                         )
                     ],
@@ -3413,13 +3458,13 @@ async def handle_grammar_challenge_answer( update, context, answer_index, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "🔄 تحدي جديد",
+                            "🔄 تَحَدٍّ جَدِيدٌ",
                             callback_data="aichallenge",
                         )
                     ],
                     [
                         InlineKeyboardButton(
-                            "🏠 القائمة الرئيسية",
+                            "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                             callback_data="m",
                         )
                     ],
@@ -3518,13 +3563,13 @@ async def handle_grammar_challenge_answer( update, context, answer_index, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "🔄 إعادة المحاولة",
+                            "🔄 إِعَادَةُ المُحَاوَلَةِ",
                             callback_data="aichallenge",
                         )
                     ],
                     [
                         InlineKeyboardButton(
-                            "🏠 القائمة الرئيسية",
+                            "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                             callback_data="m",
                         )
                     ],
@@ -3620,13 +3665,13 @@ async def cancel_grammar_challenge( update, context, ):
             [
                 [
                     InlineKeyboardButton(
-                        "🧠 بدء التحدي",
+                        "🧠 بَدْءُ التَّحَدِّي",
                         callback_data="aichallenge",
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "🏠 القائمة الرئيسية",
+                        "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                         callback_data="m",
                     )
                 ],
@@ -3664,7 +3709,7 @@ def rules_menu_markup():
     rows.append(
         [
             InlineKeyboardButton(
-                "🎲 قاعدة عشوائية",
+                "🎲 قَاعِدَةٌ عَشْوَائِيَّةٌ",
                 callback_data="rule:random",
             )
         ]
@@ -3673,7 +3718,7 @@ def rules_menu_markup():
     rows.append(
         [
             InlineKeyboardButton(
-                "🏠 القائمة الرئيسية",
+                "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                 callback_data="m",
             )
         ]
@@ -3752,7 +3797,7 @@ async def show_rule( update, context, key, ):
                     ],
                     [
                         InlineKeyboardButton(
-                            "🏠 القائمة الرئيسية",
+                            "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                             callback_data="m",
                         )
                     ],
@@ -3773,19 +3818,19 @@ async def show_rule( update, context, key, ):
             [
                 [
                     InlineKeyboardButton(
-                        "📚 كل القواعد",
+                        "📚 كُلُّ القَوَاعِدِ",
                         callback_data="rules",
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "🧠 تحدي قواعد اللغة",
+                        "🧠 تَحَدِّي قَوَاعِدِ اللُّغَةِ",
                         callback_data="aichallenge",
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "🏠 القائمة الرئيسية",
+                        "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                         callback_data="m",
                     )
                 ],
@@ -3833,13 +3878,13 @@ async def show_weather( update, context, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "🔄 تحديث الطقس",
+                            "🔄 تَحْدِيثُ الطَّقْسِ",
                             callback_data="weather",
                         )
                     ],
                     [
                         InlineKeyboardButton(
-                            "🏠 القائمة الرئيسية",
+                            "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                             callback_data="m",
                         )
                     ],
@@ -3861,13 +3906,13 @@ async def show_weather( update, context, ):
                 [
                     [
                         InlineKeyboardButton(
-                            "🔄 إعادة المحاولة",
+                            "🔄 إِعَادَةُ المُحَاوَلَةِ",
                             callback_data="weather",
                         )
                     ],
                     [
                         InlineKeyboardButton(
-                            "🏠 القائمة الرئيسية",
+                            "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                             callback_data="m"
                         )
                     ],
@@ -4213,25 +4258,25 @@ async def handle_text( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
             reply_markup=InlineKeyboardMarkup([
                 [
                     InlineKeyboardButton(
-                        "📖 البحث في مكتبة نور",
+                        "📖 البَحْثُ فِي مَكْتَبَةِ نُور",
                         url=library.build_noor_search_url(query),
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "📚 البحث في المكتبة الشاملة",
+                        "📚 البَحْثُ فِي المَكْتَبَةِ الشَّامِلَةِ",
                         url=library.build_shamela_search_url(query),
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        "🔎 بحث عن كتاب آخر",
+                        "🔎 بَحْثٌ عَنْ كِتَابٍ آخَرَ",
                         callback_data="library",
                     ),
                 ],
                 [
                     InlineKeyboardButton(
-                        "🏠 القائمة الرئيسية",
+                        "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                         callback_data="m",
                     ),
                 ],
@@ -4258,23 +4303,23 @@ async def handle_text( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
         buttons = [
             [
                 InlineKeyboardButton(
-                    "📚 حياته وآثاره",
+                    "📚 حَيَاتُهُ وَآثَارُهُ",
                     callback_data="character:detail",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    "🔎 بحث عن شخصية أخرى",
+                    "🔎 بَحْثٌ عَنْ شَخْصِيَّةٍ أُخْرَى",
                     callback_data="character",
                 ),
                 InlineKeyboardButton(
-                    "📖 الكتب",
+                    "📖 الكُتُبُ",
                     callback_data="library",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "🏠 القائمة الرئيسية",
+                    "🏠 القَائِمَةُ الرَّئِيسِيَّةُ",
                     callback_data="m",
                 ),
             ],
@@ -4543,7 +4588,7 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
             "اكتب اسم الكتاب أو اسم المؤلف، وسأجهز لك روابط البحث في المكتبة الشاملة ومكتبة نور.\n\n"
             "📌 إذا كانت هناك نسخة PDF متاحة قانونياً من المصدر، استخدم رابط التحميل الذي يتيحه المصدر.",
             InlineKeyboardMarkup([
-                [InlineKeyboardButton("❌ إلغاء", callback_data="m")],
+                [InlineKeyboardButton("❌ إِلْغَاء", callback_data="m")],
             ]),
         )
 
@@ -4561,7 +4606,7 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
                 q,
                 "❌ لم أتمكن من تحديد اسم الشخصية.",
                 InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ رجوع", callback_data="character")]
+                    [InlineKeyboardButton("⬅️ رُجُوع", callback_data="character")]
                 ]),
             )
 
@@ -4575,21 +4620,21 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
         buttons = [
             [
                 InlineKeyboardButton(
-                    "🔄 إعادة التفاصيل",
+                    "🔄 إِعَادَةُ التَّفَاصِيلِ",
                     callback_data="character:detail",
                 ),
                 InlineKeyboardButton(
-                    "🔎 شخصية أخرى",
+                    "🔎 شَخْصِيَّةٌ أُخْرَى",
                     callback_data="character",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "📖 الكتب",
+                    "📖 الكُتُبُ",
                     callback_data="library",
                 ),
                 InlineKeyboardButton(
-                    "🏠 الرئيسية",
+                    "🏠 الرَّئِيسِيَّةُ",
                     callback_data="m",
                 ),
             ],
@@ -4616,7 +4661,7 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
             "اكتب اسم الشخصية، وسأعرض لك نبذة موثقة قدر الإمكان عن حياتها ومكانتها وآثارها.\n\n"
             "بعد ظهور النبذة ستجد زر 📚 حياته وآثاره للتوسع في السيرة.",
             InlineKeyboardMarkup([
-                [InlineKeyboardButton("❌ إلغاء", callback_data="m")],
+                [InlineKeyboardButton("❌ إِلْغَاء", callback_data="m")],
             ]),
         )
 
