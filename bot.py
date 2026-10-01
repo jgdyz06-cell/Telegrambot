@@ -76,7 +76,7 @@ class _LibraryModule:
         query = cls._clean_query(query)
         return f"{cls.NOOR_BASE}?q={quote_plus(query)}"
 
-@classmethod
+    @classmethod
     def build_shamela_search_url(cls, query):
         query = cls._clean_query(query)
         return f"{cls.SHAMELA_BASE}search?query={quote_plus(query)}"
