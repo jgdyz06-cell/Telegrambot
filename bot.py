@@ -71,7 +71,7 @@ class _LibraryModule:
     def _clean_query(query):
         return " ".join(str(query or "").strip().split())[:300]
 
-@classmethod
+    @classmethod
     def build_noor_search_url(cls, query):
         query = cls._clean_query(query)
         return f"{cls.NOOR_BASE}?q={quote_plus(query)}"
