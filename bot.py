@@ -175,7 +175,7 @@ class _CharacterModule:
             "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1000},
         }
         try:
-            async with httpx.AsyncClient(timeout=25.0) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.post(
                     url,
                     params={"key": api_key},
