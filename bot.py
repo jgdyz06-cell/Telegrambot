@@ -67,30 +67,30 @@ class _LibraryModule:
     NOOR_BASE = "https://www.noor-book.com/"
     SHAMELA_BASE = "https://shamela.ws/"
 
-@staticmethod
-def _clean_query(query):
-    return " ".join(str(query or "").strip().split())[:300]
+    @staticmethod
+    def _clean_query(query):
+        return " ".join(str(query or "").strip().split())[:300]
 
-@classmethod
-def build_noor_search_url(cls, query):
-    query = cls._clean_query(query)
-    return f"{cls.NOOR_BASE}?q={quote_plus(query)}"
+    @classmethod
+    def build_noor_search_url(cls, query):
+        query = cls._clean_query(query)
+        return f"{cls.NOOR_BASE}?q={quote_plus(query)}"
 
-@classmethod
-def build_shamela_search_url(cls, query):
-    query = cls._clean_query(query)
-    return f"{cls.SHAMELA_BASE}search?query={quote_plus(query)}"
+    @classmethod
+    def build_shamela_search_url(cls, query):
+        query = cls._clean_query(query)
+        return f"{cls.SHAMELA_BASE}search?query={quote_plus(query)}"
 
-@classmethod
-def format_search_result(cls, query):
-    query = cls._clean_query(query) or "غير محدد"
-    return (
-        "📚 <b>مكتبة الكتب</b>\n\n"
-        f"🔎 البحث عن: <b>{query}</b>\n\n"
-        "وجدت لك روابط بحث مباشرة في مصادر الكتب.\n"
-        "يمكنك فتح المصدر واختيار النسخة المتاحة هناك.\n\n"
-        "📌 إذا كانت نسخة PDF محمية بحقوق النشر، استخدم النسخة التي يتيحها المصدر قانونياً."
-    )
+    @classmethod
+    def format_search_result(cls, query):
+        query = cls._clean_query(query) or "غير محدد"
+        return (
+            "📚 <b>مكتبة الكتب</b>\n\n"
+            f"🔎 البحث عن: <b>{query}</b>\n\n"
+            "وجدت لك روابط بحث مباشرة في مصادر الكتب.\n"
+            "يمكنك فتح المصدر واختيار النسخة المتاحة هناك.\n\n"
+            "📌 إذا كانت نسخة PDF محمية بحقوق النشر، استخدم النسخة التي يتيحها المصدر قانونياً."
+        )
 
 
 library = _LibraryModule()
@@ -138,109 +138,109 @@ class _CharacterModule:
         },
     }
 
-@staticmethod
-def _key(name):
-    value = re.sub(r"[ًٌٍَُِّْـ]", "", str(name or ""))
-    value = re.sub(r"^(أبو|ابو|الشيخ|الإمام|الامام)\s+", "", value.strip())
-    return value
+    @staticmethod
+    def _key(name):
+        value = re.sub(r"[ًٌٍَُِّْـ]", "", str(name or ""))
+        value = re.sub(r"^(أبو|ابو|الشيخ|الإمام|الامام)\s+", "", value.strip())
+        return value
 
-@classmethod
-def _known(cls, name):
-    raw = str(name or "").strip()
-    key = cls._key(raw)
-    for k, value in cls.KNOWN.items():
-        if cls._key(k) == key or k in raw or raw in k:
-            return value
-    return None
+    @classmethod
+    def _known(cls, name):
+        raw = str(name or "").strip()
+        key = cls._key(raw)
+        for k, value in cls.KNOWN.items():
+            if cls._key(k) == key or k in raw or raw in k:
+                return value
+        return None
 
-@staticmethod
-def _extract_text(data):
-    try:
-        parts = data["candidates"][0]["content"]["parts"]
-        return "".join(p.get("text", "") for p in parts).strip()
-    except Exception:
-        return ""
+    @staticmethod
+    def _extract_text(data):
+        try:
+            parts = data["candidates"][0]["content"]["parts"]
+            return "".join(p.get("text", "") for p in parts).strip()
+        except Exception:
+            return ""
 
-@classmethod
-async def _gemini(cls, prompt):
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        return ""
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{cls.CHARACTER_MODEL}:generateContent"
-    )
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1400},
-    }
-    try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            response = await client.post(
-                url,
-                params={"key": api_key},
-                json=payload,
-            )
-            response.raise_for_status()
-            return cls._extract_text(response.json())
-    except Exception:
-        return ""
+    @classmethod
+    async def _gemini(cls, prompt):
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not api_key:
+            return ""
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{cls.CHARACTER_MODEL}:generateContent"
+        )
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1400},
+        }
+        try:
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                response = await client.post(
+                    url,
+                    params={"key": api_key},
+                    json=payload,
+                )
+                response.raise_for_status()
+                return cls._extract_text(response.json())
+        except Exception:
+            return ""
 
-@classmethod
-async def get_character(cls, name):
-    name = " ".join(str(name or "").strip().split())[:150]
-    if not name:
-        return False, "❌ اكتب اسم الشخصية أولاً."
-    known = cls._known(name)
-    if known:
-        return True, cls._format_card(known)
-    prompt = f""" أنت مساعد أكاديمي عربي لقسم «سير الأعلام». اكتب نبذة دقيقة ومختصرة عن الشخصية التالية: {name} مهم: - لا تخترع معلومات. - إذا كان الاسم غامضاً أو لا تستطيع تحديد الشخصية بثقة، اذكر أن الاسم غير واضح واطلب تحديد الشخصية. - اجعل الجواب مناسباً للطلاب. - أخرج النص فقط. التنسيق: 🏺 الاسم: 📅 العصر: 📚 المجال: نبذة: ... 🪶 أبرز المؤلفات/الآثار: ... """
-    result = await cls._gemini(prompt)
-    if result:
-        return True, result
-    return False, "❌ لم أتمكن من التحقق من الشخصية حالياً.\n\nاكتب الاسم بصورة أوضح، أو جرّب اسماً آخر."
+    @classmethod
+    async def get_character(cls, name):
+        name = " ".join(str(name or "").strip().split())[:150]
+        if not name:
+            return False, "❌ اكتب اسم الشخصية أولاً."
+        known = cls._known(name)
+        if known:
+            return True, cls._format_card(known)
+        prompt = f""" أنت مساعد أكاديمي عربي لقسم «سير الأعلام». اكتب نبذة دقيقة ومختصرة عن الشخصية التالية: {name} مهم: - لا تخترع معلومات. - إذا كان الاسم غامضاً أو لا تستطيع تحديد الشخصية بثقة، اذكر أن الاسم غير واضح واطلب تحديد الشخصية. - اجعل الجواب مناسباً للطلاب. - أخرج النص فقط. التنسيق: 🏺 الاسم: 📅 العصر: 📚 المجال: نبذة: ... 🪶 أبرز المؤلفات/الآثار: ... """
+        result = await cls._gemini(prompt)
+        if result:
+            return True, result
+        return False, "❌ لم أتمكن من التحقق من الشخصية حالياً.\n\nاكتب الاسم بصورة أوضح، أو جرّب اسماً آخر."
 
-@classmethod
-async def get_character_detail(cls, name):
-    name = " ".join(str(name or "").strip().split())[:150]
-    if not name:
-        return "❌ لم يتم تحديد اسم الشخصية."
-    known = cls._known(name)
-    if known:
-        return cls._known_detail(known)
-    prompt = f""" اكتب سيرة أكاديمية عربية منظمة للشخصية: {name} لا تخمّن. إذا كان الاسم غير واضح أو توجد شخصيات متعددة بالاسم، اذكر ذلك واطلب التحديد. غطِّ فقط ما يمكن دعمه بثقة، وبالعناوين التالية: 📚 حياته وآثاره 🧬 نشأته ونسبه 🎓 طلبه للعلم وشيوخه 📚 علمه ومكانته 🪶 أبرز مؤلفاته 👥 تلاميذه ومن تأثر بهم 🏛️ أهم محطات حياته 💡 أبرز أفكاره وإسهاماته 🕊️ وفاته 📌 أثره في اللغة والأدب 📚 مصادر ومراجع للتوسع اكتب بلغة عربية واضحة ومناسبة للطلاب، ولا تضع روابط مخترعة. """
-    result = await cls._gemini(prompt)
-    if result:
-        return result
-    return "❌ تعذر إعداد السيرة التفصيلية حالياً. حاول مرة ثانية بعد قليل."
+    @classmethod
+    async def get_character_detail(cls, name):
+        name = " ".join(str(name or "").strip().split())[:150]
+        if not name:
+            return "❌ لم يتم تحديد اسم الشخصية."
+        known = cls._known(name)
+        if known:
+            return cls._known_detail(known)
+        prompt = f""" اكتب سيرة أكاديمية عربية منظمة للشخصية: {name} لا تخمّن. إذا كان الاسم غير واضح أو توجد شخصيات متعددة بالاسم، اذكر ذلك واطلب التحديد. غطِّ فقط ما يمكن دعمه بثقة، وبالعناوين التالية: 📚 حياته وآثاره 🧬 نشأته ونسبه 🎓 طلبه للعلم وشيوخه 📚 علمه ومكانته 🪶 أبرز مؤلفاته 👥 تلاميذه ومن تأثر بهم 🏛️ أهم محطات حياته 💡 أبرز أفكاره وإسهاماته 🕊️ وفاته 📌 أثره في اللغة والأدب 📚 مصادر ومراجع للتوسع اكتب بلغة عربية واضحة ومناسبة للطلاب، ولا تضع روابط مخترعة. """
+        result = await cls._gemini(prompt)
+        if result:
+            return result
+        return "❌ تعذر إعداد السيرة التفصيلية حالياً. حاول مرة ثانية بعد قليل."
 
-@staticmethod
-def _format_card(item):
-    return (
-        "🏺 <b>سيرة علم</b>\n\n"
-        f"👤 <b>الاسم:</b> {item['name']}\n"
-        f"📅 <b>العصر:</b> {item['era']}\n"
-        f"📚 <b>المجال:</b> {item['field']}\n\n"
-        f"📝 <b>نبذة:</b>\n{item['summary']}\n\n"
-        f"🪶 <b>أبرز الآثار:</b>\n{item['works']}"
-    )
+    @staticmethod
+    def _format_card(item):
+        return (
+            "🏺 <b>سيرة علم</b>\n\n"
+            f"👤 <b>الاسم:</b> {item['name']}\n"
+            f"📅 <b>العصر:</b> {item['era']}\n"
+            f"📚 <b>المجال:</b> {item['field']}\n\n"
+            f"📝 <b>نبذة:</b>\n{item['summary']}\n\n"
+            f"🪶 <b>أبرز الآثار:</b>\n{item['works']}"
+        )
 
-@staticmethod
-def _known_detail(item):
-    return (
-        "📚 <b>حياته وآثاره</b>\n\n"
-        f"👤 <b>{item['name']}</b>\n\n"
-        f"🧬 <b>نشأته ونسبه</b>\n{item['name']} من أعلام التراث العربي، وتُذكر ترجمته في مصادر التراجم واللغة والأدب.\n\n"
-        "🎓 <b>طلبه للعلم وشيوخه</b>\nارتبط تكوينه العلمي ببيئة العلم والرواية في عصره، وتفاصيل الشيوخ والتلاميذ تُراجع في كتب التراجم المتخصصة.\n\n"
-        f"📚 <b>علمه ومكانته</b>\nبرز في مجال {item['field']}، واشتهر بأثره في الدرس العربي.\n\n"
-        f"🪶 <b>أبرز مؤلفاته</b>\n{item['works']}\n\n"
-        "👥 <b>تلاميذه ومن تأثر بهم</b>\nتُبحث هذه التفاصيل في مصادر التراجم والدراسات المتخصصة.\n\n"
-        "🏛️ <b>أهم محطات حياته</b>\nتُراجع في كتب الطبقات والتراجم الخاصة بعصره.\n\n"
-        "💡 <b>أبرز أفكاره وإسهاماته</b>\nأسهم في المجال الذي عُرف به، وترك أثراً في التراث العربي.\n\n"
-        "🕊️ <b>وفاته</b>\nتُراجع سنة الوفاة وتفاصيلها في المصادر المتخصصة لتجنب نقل تاريخ غير موثق.\n\n"
-        "📌 <b>أثره في اللغة والأدب</b>\nيمثل جزءاً مهماً من تاريخ الدراسات العربية والأدب بحسب تخصصه.\n\n"
-        "📚 <b>مصادر ومراجع للتوسع</b>\nيمكن الرجوع إلى كتب التراجم وطبقات العلماء، وإلى مكتبة نور والمكتبة الشاملة للبحث عن المصادر والنصوص الأصلية."
-    )
+    @staticmethod
+    def _known_detail(item):
+        return (
+            "📚 <b>حياته وآثاره</b>\n\n"
+            f"👤 <b>{item['name']}</b>\n\n"
+            f"🧬 <b>نشأته ونسبه</b>\n{item['name']} من أعلام التراث العربي، وتُذكر ترجمته في مصادر التراجم واللغة والأدب.\n\n"
+            "🎓 <b>طلبه للعلم وشيوخه</b>\nارتبط تكوينه العلمي ببيئة العلم والرواية في عصره، وتفاصيل الشيوخ والتلاميذ تُراجع في كتب التراجم المتخصصة.\n\n"
+            f"📚 <b>علمه ومكانته</b>\nبرز في مجال {item['field']}، واشتهر بأثره في الدرس العربي.\n\n"
+            f"🪶 <b>أبرز مؤلفاته</b>\n{item['works']}\n\n"
+            "👥 <b>تلاميذه ومن تأثر بهم</b>\nتُبحث هذه التفاصيل في مصادر التراجم والدراسات المتخصصة.\n\n"
+            "🏛️ <b>أهم محطات حياته</b>\nتُراجع في كتب الطبقات والتراجم الخاصة بعصره.\n\n"
+            "💡 <b>أبرز أفكاره وإسهاماته</b>\nأسهم في المجال الذي عُرف به، وترك أثراً في التراث العربي.\n\n"
+            "🕊️ <b>وفاته</b>\nتُراجع سنة الوفاة وتفاصيلها في المصادر المتخصصة لتجنب نقل تاريخ غير موثق.\n\n"
+            "📌 <b>أثره في اللغة والأدب</b>\nيمثل جزءاً مهماً من تاريخ الدراسات العربية والأدب بحسب تخصصه.\n\n"
+            "📚 <b>مصادر ومراجع للتوسع</b>\nيمكن الرجوع إلى كتب التراجم وطبقات العلماء، وإلى مكتبة نور والمكتبة الشاملة للبحث عن المصادر والنصوص الأصلية."
+        )
 
 
 character = _CharacterModule()
@@ -1007,46 +1007,30 @@ def outfit_menu_markup(gender):
         [
             [
                 InlineKeyboardButton(
-                    f"{title} — Casual",
-                    callback_data=f"outfit:style:{gender}:casual",
+                    "➕ إضافة قطعة",
+                    callback_data=f"outfit:add:{gender}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{title} — Formal",
-                    callback_data=f"outfit:style:{gender}:formal",
+                    "👕 ملابسي",
+                    callback_data=f"outfit:list:{gender}",
+                ),
+                InlineKeyboardButton(
+                    "✨ نسّق لي",
+                    callback_data=f"outfit:generate:{gender}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{title} — Sport",
-                    callback_data=f"outfit:style:{gender}:sport",
+                    "🗑️ إدارة الملابس",
+                    callback_data=f"outfit:manage:{gender}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "🔙 رجوع",
+                    "🔄 تغيير القسم",
                     callback_data="outfit",
-                ),
-            ],
-        ]
-    )
-
-
-def outfit_style_markup(gender, style):
-
-    return InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "✨ توليد إطلالة",
-                    callback_data=f"outfit:generate:{gender}:{style}",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    "🔙 رجوع",
-                    callback_data=f"outfit:{gender}",
                 ),
             ],
             [
@@ -1059,597 +1043,1118 @@ def outfit_style_markup(gender, style):
     )
 
 
-def _safe_user_text(update):
+def outfit_manage_markup(gender):
 
-    user = update.effective_user
-
-    if not user:
-        return ""
-
-    return (
-        f"المستخدم: {user.full_name}\n"
-        f"المعرف: @{user.username or 'بدون معرف'}\n"
-        f"ID: {user.id}"
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "👕 عرض الملابس",
+                    callback_data=f"outfit:list:{gender}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🗑️ حذف قطعة",
+                    callback_data=f"outfit:delete_menu:{gender}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🧹 مسح كل الملابس",
+                    callback_data=f"outfit:clear:{gender}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "⬅️ رجوع",
+                    callback_data=f"outfit:{gender}",
+                ),
+            ],
+        ]
     )
 
 
-def outfit_prompt(gender, style):
+async def show_outfit( update, context, ):
 
-    gender_text = (
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    await show(
+        q,
+        "👕 Outfit\n\n"
+        "اختار القسم:",
+        outfit_gender_markup(),
+    )
+
+
+async def show_outfit_gender( update, context, gender, ):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    if gender == "him":
+        title = "🖤 For Him"
+    elif gender == "her":
+        title = "🤍 For Her"
+    else:
+        return
+
+    try:
+        count = db.count_wardrobe_items(
+            q.from_user.id,
+            gender,
+        )
+    except Exception:
+        logger.exception(
+            "Could not count wardrobe items."
+        )
+        count = 0
+
+    await show(
+        q,
+        "👕 Outfit\n\n"
+        f"{title}\n\n"
+        f"👕 القطع المحفوظة: {count}\n\n"
+        "أضف ملابسك وألوانها، وبعدها أقدر "
+        "أرتب لك تنسيقات باستخدام الموجود عندك فقط.",
+        outfit_menu_markup(gender),
+    )
+
+
+async def outfit_add_start( update, context, gender, ):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    if gender not in ("him", "her"):
+        return
+
+    context.user_data["outfit_await"] = {
+        "gender": gender,
+    }
+
+    title = (
+        "🖤 For Him"
+        if gender == "him"
+        else "🤍 For Her"
+    )
+
+    await q.edit_message_text(
+        "➕ إضافة قطعة ملابس\n\n"
+        f"{title}\n\n"
+        "أرسل اسم القطعة ولونها بهذا الشكل:\n\n"
+        "قميص - أسود\n"
+        "بنطال - جينز أزرق\n"
+        "حذاء - أبيض\n\n"
+        "📌 كل رسالة تضيف قطعة واحدة.\n"
+        "مثال: تيشيرت - أبيض",
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "❌ إلغاء",
+                        callback_data=f"outfit:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
+
+
+def parse_outfit_item(text):
+
+    text = (text or "").strip()
+
+    if not text:
+        return None
+
+    separators = [
+        " - ",
+        "-",
+        " – ",
+        "–",
+        " — ",
+        "—",
+        "|",
+        "،",
+        ",",
+    ]
+
+    category = ""
+    color = ""
+
+    for separator in separators:
+
+        if separator in text:
+
+            parts = text.split(
+                separator,
+                1,
+            )
+
+            category = parts[0].strip()
+            color = parts[1].strip()
+
+            break
+
+    if not category or not color:
+        return None
+
+    if len(category) > 80:
+        category = category[:80].strip()
+
+    if len(color) > 80:
+        color = color[:80].strip()
+
+    return category, color
+
+
+async def outfit_save_text( update, context, text, ):
+
+    message = update.message
+
+    if not message:
+        return
+
+    outfit_await = context.user_data.get(
+        "outfit_await"
+    )
+
+    if not outfit_await:
+        return False
+
+    gender = outfit_await.get(
+        "gender"
+    )
+
+    if gender not in ("him", "her"):
+        context.user_data.pop(
+            "outfit_await",
+            None,
+        )
+        return False
+
+    parsed = parse_outfit_item(text)
+
+    if not parsed:
+
+        await message.reply_text(
+            "❌ الصيغة غير واضحة.\n\n"
+            "اكتبها بهذا الشكل:\n"
+            "قميص - أسود\n\n"
+            "أو:\n"
+            "بنطال - جينز أزرق"
+        )
+
+        return True
+
+    category, color = parsed
+
+    try:
+
+        db.add_wardrobe_item(
+            message.from_user.id,
+            gender,
+            category,
+            color,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not save wardrobe item."
+        )
+
+        await message.reply_text(
+            "❌ ما قدرت أحفظ القطعة حالياً.\n\n"
+            "حاول مرة ثانية."
+        )
+
+        return True
+
+    title = (
+        "🖤 For Him"
+        if gender == "him"
+        else "🤍 For Her"
+    )
+
+    await message.reply_text(
+        "✅ تم حفظ القطعة.\n\n"
+        f"{title}\n"
+        f"👕 القطعة: {category}\n"
+        f"🎨 اللون: {color}\n\n"
+        "تقدر تضيف قطعة ثانية بنفس الطريقة.",
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "➕ إضافة قطعة ثانية",
+                        callback_data=f"outfit:add:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "👕 عرض ملابسي",
+                        callback_data=f"outfit:list:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "✨ نسّق لي",
+                        callback_data=f"outfit:generate:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ رجوع",
+                        callback_data=f"outfit:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
+
+    return True
+
+
+async def outfit_list( update, context, gender, ):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    try:
+
+        items = db.get_wardrobe_items(
+            q.from_user.id,
+            gender,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not load wardrobe."
+        )
+
+        await show(
+            q,
+            "❌ تعذر تحميل الملابس حالياً.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:{gender}",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+        return
+
+    title = (
+        "🖤 For Him"
+        if gender == "him"
+        else "🤍 For Her"
+    )
+
+    if not items:
+
+        await show(
+            q,
+            "👕 ملابسي\n\n"
+            f"{title}\n\n"
+            "ما عندك قطع محفوظة حالياً.\n\n"
+            "أضف ملابسك وألوانها حتى أستخدمها "
+            "في تنسيق الملابس.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "➕ إضافة قطعة",
+                            callback_data=f"outfit:add:{gender}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:{gender}",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+        return
+
+    lines = [
+        "👕 **ملابسي**",
+        "",
+        title,
+        "",
+    ]
+
+    for index, item in enumerate(items, 1):
+
+        category = item["category"]
+        color = item["color"]
+
+        lines.append(
+            f"{index}. 👕 {category} — 🎨 {color}"
+        )
+
+    lines.extend(
+        [
+            "",
+            "يمكنك حذف قطعة من قسم إدارة الملابس.",
+        ]
+    )
+
+    await show(
+        q,
+        "\n".join(lines),
+        InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "✨ نسّق لي",
+                        callback_data=f"outfit:generate:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🗑️ إدارة الملابس",
+                        callback_data=f"outfit:manage:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ رجوع",
+                        callback_data=f"outfit:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
+
+
+async def outfit_manage( update, context, gender, ):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    await show(
+        q,
+        "🗑️ إدارة الملابس\n\n"
+        "اختار العملية التي تريدها:",
+        outfit_manage_markup(gender),
+    )
+
+
+async def outfit_delete_menu( update, context, gender, ):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    try:
+
+        items = db.get_wardrobe_items(
+            q.from_user.id,
+            gender,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not load wardrobe for delete."
+        )
+
+        return
+
+    if not items:
+
+        await show(
+            q,
+            "🗑️ حذف قطعة\n\n"
+            "ما عندك ملابس محفوظة حتى تحذفها.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:manage:{gender}",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+        return
+
+    rows = []
+
+    for item in items:
+
+        item_id = int(item["id"])
+
+        label = (
+            f"🗑️ {item['category']} — "
+            f"{item['color']}"
+        )
+
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    label,
+                    callback_data=f"outfit:delete:{item_id}:{gender}",
+                )
+            ]
+        )
+
+    rows.append(
+        [
+            InlineKeyboardButton(
+                "⬅️ رجوع",
+                callback_data=f"outfit:manage:{gender}",
+            )
+        ]
+    )
+
+    await show(
+        q,
+        "🗑️ اختار القطعة التي تريد حذفها:",
+        InlineKeyboardMarkup(rows),
+    )
+
+
+async def outfit_delete( update, context, item_id, gender, ):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    try:
+
+        item = db.get_wardrobe_item(
+            item_id,
+            q.from_user.id,
+        )
+
+        if not item:
+            await show(
+                q,
+                "❌ القطعة غير موجودة.",
+                InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "⬅️ رجوع",
+                                callback_data=f"outfit:manage:{gender}",
+                            )
+                        ]
+                    ]
+                ),
+            )
+            return
+
+        if int(item["user_id"]) != q.from_user.id:
+            return
+
+        db.delete_wardrobe_item(
+            item_id,
+            q.from_user.id,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not delete wardrobe item."
+        )
+
+        await show(
+            q,
+            "❌ تعذر حذف القطعة حالياً.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:manage:{gender}",
+                        )
+                    ]
+                ]
+            ),
+        )
+
+        return
+
+    await show(
+        q,
+        "✅ تم حذف القطعة.",
+        InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "🗑️ حذف قطعة ثانية",
+                        callback_data=f"outfit:delete_menu:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "👕 عرض الملابس",
+                        callback_data=f"outfit:list:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ رجوع",
+                        callback_data=f"outfit:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
+
+
+async def outfit_clear( update, context, gender, ):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    await show(
+        q,
+        "⚠️ هل أنت متأكد؟\n\n"
+        "سيتم حذف كل الملابس المحفوظة لهذا القسم.",
+        InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "🗑️ نعم، احذف الكل",
+                        callback_data=f"outfit:clear_yes:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "❌ إلغاء",
+                        callback_data=f"outfit:manage:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
+
+
+async def outfit_clear_yes( update, context, gender, ):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    try:
+
+        db.clear_wardrobe(
+            q.from_user.id,
+            gender,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Could not clear wardrobe."
+        )
+
+        await show(
+            q,
+            "❌ تعذر مسح الملابس حالياً.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:{gender}",
+                        )
+                    ]
+                ]
+            ),
+        )
+
+        return
+
+    await show(
+        q,
+        "✅ تم مسح جميع الملابس المحفوظة لهذا القسم.",
+        InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "➕ إضافة ملابس",
+                        callback_data=f"outfit:add:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ رجوع",
+                        callback_data=f"outfit:{gender}",
+                    )
+                ],
+            ]
+        ),
+    )
+
+
+def _generate_outfit_sync( gender, items, ):
+
+    if not GEMINI_API_KEY:
+        raise RuntimeError(
+            "GEMINI_API_KEY غير موجود."
+        )
+
+    if image_client is None:
+        raise RuntimeError(
+            "تعذر الاتصال بخدمة Gemini."
+        )
+
+    if not items:
+        raise RuntimeError(
+            "لا توجد ملابس محفوظة."
+        )
+
+    gender_name = (
         "رجل"
         if gender == "him"
         else "امرأة"
     )
 
-    style_text = {
-        "casual": "كاجوال",
-        "formal": "رسمي",
-        "sport": "رياضي",
-    }.get(style, "كاجوال")
+    wardrobe_lines = []
 
-    return (
-        "أنت خبير أزياء. "
-        f"اقترح إطلالة {style_text} مناسبة لـ {gender_text}. "
-        "اذكر القطع والألوان والتنسيق بصورة مختصرة وعملية. "
-        "اكتب بالعربية."
+    for item in items:
+
+        wardrobe_lines.append(
+            f"- {item['category']} | اللون: {item['color']}"
+        )
+
+    wardrobe_text = "\n".join(
+        wardrobe_lines
+    )
+
+    prompt = f""" أنت مساعد متخصص بتنسيق الملابس. المستخدم يريد تنسيق ملابس لـ {gender_name}. هذه هي الملابس التي يملكها المستخدم فعلاً: {wardrobe_text} مهم جداً: - استخدم فقط القطع الموجودة في القائمة. - لا تخترع قطعة ملابس غير موجودة. - لا تضف لوناً غير اللون المسجل للقطعة. - يمكنك عدم استخدام بعض القطع إذا لم تكن مناسبة. - كوّن تنسيقاً عملياً ومتناسقاً. - إذا لم توجد قطع كافية، قل ذلك بوضوح ولا تخترع قطعاً. - لا تذكر أسعاراً أو ماركات غير موجودة. - لا تقترح شراء ملابس. - أجب بالعربية. - اجعل النتيجة مختصرة ومرتبة. أعطني: 👕 التنسيق المقترح - القطعة: - اللون: - القطعة: - اللون: ثم: 🎨 لماذا هذا التنسيق؟ سطران أو ثلاثة فقط. ثم: 👟 الإكسسوارات أو الحذاء: استخدم فقط ما هو موجود في القائمة، وإذا لم يوجد اكتب: لا توجد قطعة مناسبة محفوظة. مهم: لا تستخدم أي قطعة غير موجودة في القائمة. """
+
+    interaction = image_client.interactions.create(
+        model=OUTFIT_MODEL,
+        input=prompt,
+        generation_config={
+            "thinking_level": "minimal",
+            "max_output_tokens": 900,
+        },
+    )
+
+    if not interaction:
+        raise RuntimeError(
+            "Gemini أعاد استجابة فارغة."
+        )
+
+    result = getattr(
+        interaction,
+        "output_text",
+        None,
+    )
+
+    if not result:
+        raise RuntimeError(
+            "Gemini لم يرجع تنسيقاً."
+        )
+
+    return result.strip()
+
+
+async def generate_outfit( gender, items, ):
+
+    return await asyncio.to_thread(
+        _generate_outfit_sync,
+        gender,
+        items,
     )
 
 
-async def generate_outfit(gender, style):
+async def outfit_generate( update, context, gender, ):
 
-    if not GEMINI_API_KEY:
-        return (
-            "❌ مفتاح Gemini غير موجود.\n\n"
-            "أضف GEMINI_API_KEY إلى متغيرات البيئة."
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(
+        update,
+        context,
+    ):
+        return
+
+    try:
+
+        items = db.get_wardrobe_items(
+            q.from_user.id,
+            gender,
         )
 
-    prompt = outfit_prompt(
-        gender,
-        style,
+    except Exception:
+
+        logger.exception(
+            "Could not load wardrobe for outfit generation."
+        )
+
+        await show(
+            q,
+            "❌ تعذر قراءة ملابسك حالياً.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:{gender}",
+                        )
+                    ]
+                ]
+            ),
+        )
+
+        return
+
+    if not items:
+
+        await show(
+            q,
+            "👕 ما عندك ملابس محفوظة بعد.\n\n"
+            "أضف القطع وألوانها أولاً حتى أقدر "
+            "أسوي لك تنسيق.",
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "➕ إضافة قطعة",
+                            callback_data=f"outfit:add:{gender}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:{gender}",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+        return
+
+    await show(
+        q,
+        "✨ جاري تنسيق ملابسك...\n\n"
+        "أستخدم فقط الملابس والألوان المحفوظة عندك.",
     )
 
     try:
 
-        async with httpx.AsyncClient(
-            timeout=60.0,
-        ) as client:
+        ok, result = await generate_outfit(
+            q.from_user.id,
+            gender,
+        )
 
-            response = await client.post(
-                (
-                    "https://generativelanguage.googleapis.com/"
-                    "v1beta/models/"
-                    f"{OUTFIT_MODEL}:generateContent"
-                ),
-                params={
-                    "key": GEMINI_API_KEY,
-                },
-                json={
-                    "contents": [
-                        {
-                            "parts": [
-                                {
-                                    "text": prompt,
-                                }
-                            ]
-                        }
-                    ],
-                },
-            )
+        if not ok:
+            raise RuntimeError(result)
 
-            response.raise_for_status()
-
-            data = response.json()
-
-            try:
-
-                parts = (
-                    data["candidates"][0]
-                    ["content"]["parts"]
-                )
-
-                text = "".join(
-                    part.get("text", "")
-                    for part in parts
-                ).strip()
-
-            except Exception:
-
-                text = ""
-
-            if text:
-                return text
-
-    except Exception:
+    except Exception as error:
 
         logger.exception(
             "Outfit generation failed."
         )
 
-    return (
-        "❌ تعذر توليد الإطلالة حالياً.\n"
-        "حاول مرة ثانية."
-    )
-
-
-async def outfit_start(update, context):
-
-    q = update.callback_query
-
-    if not q:
-        return
-
-    await safe_answer(q)
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    await show(
-        q,
-        "👕 <b>من تختار؟</b>",
-        outfit_gender_markup(),
-    )
-
-
-async def outfit_gender(update, context, gender):
-
-    q = update.callback_query
-
-    if not q:
-        return
-
-    await safe_answer(q)
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    if gender not in {
-        "him",
-        "her",
-    }:
-        gender = "him"
-
-    await show(
-        q,
-        "👕 <b>اختار نوع الإطلالة:</b>",
-        outfit_menu_markup(gender),
-    )
-
-
-async def outfit_style(update, context, gender, style):
-
-    q = update.callback_query
-
-    if not q:
-        return
-
-    await safe_answer(q)
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    if gender not in {
-        "him",
-        "her",
-    }:
-        gender = "him"
-
-    if style not in {
-        "casual",
-        "formal",
-        "sport",
-    }:
-        style = "casual"
-
-    context.user_data[
-        "outfit_gender"
-    ] = gender
-
-    context.user_data[
-        "outfit_style"
-    ] = style
-
-    await show(
-        q,
-        (
-            "👕 <b>الإطلالة جاهزة للإعداد</b>\n\n"
-            "اضغط توليد حتى يحصل البوت على اقتراح مناسب."
-        ),
-        outfit_style_markup(
-            gender,
-            style,
-        ),
-    )
-
-
-async def outfit_generate(update, context, gender, style):
-
-    q = update.callback_query
-
-    if not q:
-        return
-
-    await safe_answer(q)
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    await show(
-        q,
-        "⏳ جاري إعداد الإطلالة...",
-    )
-
-    result = await generate_outfit(
-        gender,
-        style,
-    )
-
-    await show(
-        q,
-        (
-            "👕 <b>اقتراح الإطلالة</b>\n\n"
-            f"{result}"
-        ),
-        outfit_style_markup(
-            gender,
-            style,
-        ),
-    )
-
-
-# ============================================================
-# Library Handlers
-# ============================================================
-
-async def library_start(update, context):
-
-    q = update.callback_query
-
-    if not q:
-        return
-
-    await safe_answer(q)
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    await show(
-        q,
-        (
-            "📚 <b>مكتبة الكتب</b>\n\n"
-            "أرسل اسم الكتاب أو المؤلف الذي تريد البحث عنه."
-        ),
-        InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "🏠 القائمة الرئيسية",
-                        callback_data="m",
-                    )
-                ]
-            ]
-        ),
-    )
-
-    context.user_data[
-        "waiting_library_query"
-    ] = True
-
-
-async def library_search(update, context):
-
-    if not update.message:
-        return
-
-    if not context.user_data.get(
-        "waiting_library_query"
-    ):
-        return
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    query = (
-        update.message.text
-        or ""
-    ).strip()
-
-    if not query:
-        await update.message.reply_text(
-            "❌ اكتب اسم الكتاب أو المؤلف."
-        )
-        return
-
-    context.user_data[
-        "waiting_library_query"
-    ] = False
-
-    query = _LibraryModule._clean_query(
-        query
-    )
-
-    noor = library.build_noor_search_url(
-        query
-    )
-
-    shamela = library.build_shamela_search_url(
-        query
-    )
-
-    text = (
-        library.format_search_result(
-            query
-        )
-        + "\n\n"
-        f"🔗 <a href=\"{noor}\">البحث في مكتبة نور</a>\n"
-        f"🔗 <a href=\"{shamela}\">البحث في المكتبة الشاملة</a>"
-    )
-
-    await update.message.reply_text(
-        text,
-        parse_mode="HTML",
-        disable_web_page_preview=True,
-    )
-
-
-# ============================================================
-# Character Handlers
-# ============================================================
-
-async def character_start(update, context):
-
-    q = update.callback_query
-
-    if not q:
-        return
-
-    await safe_answer(q)
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    context.user_data[
-        "waiting_character"
-    ] = True
-
-    await show(
-        q,
-        (
-            "🏺 <b>سير الأعلام</b>\n\n"
-            "اكتب اسم الشخصية التي تريد معرفة سيرتها."
-        ),
-        InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "🏠 القائمة الرئيسية",
-                        callback_data="m",
-                    )
-                ]
-            ]
-        ),
-    )
-
-
-async def character_search(update, context):
-
-    if not update.message:
-        return
-
-    if not context.user_data.get(
-        "waiting_character"
-    ):
-        return
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    name = (
-        update.message.text
-        or ""
-    ).strip()
-
-    if not name:
-        await update.message.reply_text(
-            "❌ اكتب اسم الشخصية."
-        )
-        return
-
-    context.user_data[
-        "waiting_character"
-    ] = False
-
-    ok, result = await character.get_character(
-        name
-    )
-
-    if not ok:
-        await update.message.reply_text(
-            result
-        )
-        return
-
-    await update.message.reply_text(
-        result,
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "📚 السيرة التفصيلية",
-                        callback_data=f"character:detail:{name[:80]}",
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "🏠 القائمة الرئيسية",
-                        callback_data="m",
-                    )
-                ],
-            ]
-        ),
-    )
-
-
-async def character_detail(update, context, name):
-
-    q = update.callback_query
-
-    if not q:
-        return
-
-    await safe_answer(q)
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    result = await character.get_character_detail(
-        name
-    )
-
-    await show(
-        q,
-        result,
-        InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "🔙 رجوع",
-                        callback_data="character",
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "🏠 القائمة الرئيسية",
-                        callback_data="m",
-                    )
-                ],
-            ]
-        ),
-    )
-
-
-# ============================================================
-# AI Handler
-# ============================================================
-
-async def handle_ai(
-    update,
-    context,
-    mode,
-):
-
-    q = update.callback_query
-
-    if not q:
-        return
-
-    await safe_answer(q)
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    if mode not in AI_MODES:
-        mode = "explain"
-
-    text = (
-        context.user_data.get(
-            "ai_text",
-            "",
-        )
-        or ""
-    ).strip()
-
-    if not text:
+        error_text = str(error).upper()
+
+        if (
+            "429" in error_text
+            or "RESOURCE_EXHAUSTED" in error_text
+        ):
+
+            message = (
+                "⚠️ تم الوصول إلى حد الطلبات مؤقتاً.\n\n"
+                "انتظر قليلاً وحاول مرة ثانية."
+            )
+
+        elif (
+            "503" in error_text
+            or "UNAVAILABLE" in error_text
+        ):
+
+            message = (
+                "⚠️ Gemini مشغول حالياً.\n\n"
+                "حاول مرة ثانية 🔄"
+            )
+
+        elif (
+            "504" in error_text
+            or "TIMEOUT" in error_text
+            or "DEADLINE_EXCEEDED" in error_text
+        ):
+
+            message = (
+                "⏱️ Gemini تأخر بالاستجابة.\n\n"
+                "حاول مرة ثانية 🔄"
+            )
+
+        else:
+
+            message = (
+                "❌ ما قدرت أجهز تنسيق الملابس حالياً.\n\n"
+                "حاول مرة ثانية 🔄"
+            )
 
         await show(
-
             q,
-
-            "❌ ما عندي نص للتحليل.\n\n"
-            "أرسل نص أو صورة أو تسجيل صوتي أولاً.",
-
-            main_menu(
-                q.from_user.id
+            message,
+            InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔄 إعادة التنسيق",
+                            callback_data=f"outfit:generate:{gender}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "👕 ملابسي",
+                            callback_data=f"outfit:list:{gender}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ رجوع",
+                            callback_data=f"outfit:{gender}",
+                        )
+                    ],
+                ]
             ),
-
         )
 
         return
 
-    await show(
-
-        q,
-
-        "⏳ جاري التحليل...\n\n"
-        + AI_MODES[mode],
-
-    )
-
-    try:
-
-        result = await ask_ai(
-            mode,
-            text,
-        )
-
-    except Exception:
-
-        logger.exception(
-            "AI callback error."
-        )
-
-        result = (
-
-            "❌ صار خطأ أثناء التحليل.\n\n"
-            "حاول مرة ثانية."
-
-        )
-
     context.user_data[
-        "last_ai_result"
+        "last_outfit_result"
     ] = result
 
-    await send_long_message(
-        q.message,
+    await show(
+        q,
         result,
+        InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "✨ تنسيق ثاني",
+                        callback_data=f"outfit:generate:{gender}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "👕 ملابسي",
+                        callback_data=f"outfit:list:{gender}",
+                    ),
+                    InlineKeyboardButton(
+                        "➕ إضافة قطعة",
+                        callback_data=f"outfit:add:{gender}",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ رجوع",
+                        callback_data=f"outfit:{gender}",
+                    )
+                ],
+            ]
+        ),
     )
 
-    await q.message.reply_text(
 
-        "🔄 تريد تحليل النص بطريقة ثانية؟",
+# ============================================================
+# Voice Transcription
+# ============================================================
 
-        reply_markup=ai_markup(),
+def _transcribe_voice_file( file_path ):
 
+    if not GEMINI_API_KEY:
+
+        raise RuntimeError(
+            "GEMINI_API_KEY غير موجود."
+        )
+
+    if voice_client is None:
+
+        raise RuntimeError(
+            "تعذر إنشاء اتصال Gemini للصوت."
+        )
+
+    if types is None:
+
+        raise RuntimeError(
+            "تعذر تحميل إعدادات google-genai."
+        )
+
+    logger.info(
+        "Uploading voice file to Gemini..."
+    )
+
+    audio_file = voice_client.files.upload(
+
+        file=file_path,
+
+        config=types.UploadFileConfig(
+            mime_type="audio/ogg",
+        ),
+
+    )
+
+    logger.info(
+        "Voice file uploaded successfully."
+    )
+
+    interaction = (
+        voice_client.interactions.create(
+
+            model=VOICE_MODEL,
+
+            input=[
+                {
+                    "type": "audio",
+                    "uri": audio_file.uri,
+                    "mime_type": "audio/ogg",
+                }
+            ],
+
+            generation_config={
+                "transcription_config": {
+                    "mode": "smart",
+                    "language_codes": ["ar"],
+                }
+            },
+
+        )
+    )
+
+    if not interaction:
+
+        raise RuntimeError(
+            "Gemini أعاد استجابة فارغة."
+        )
+
+    result = getattr(
+        interaction,
+        "output_text",
+        None,
+    )
+
+    if not result:
+
+        raise RuntimeError(
+            "Gemini لم يرجع نصاً للصوت."
+        )
+
+    return result.strip()
+
+
+async def transcribe_voice( file_path ):
+
+    return await asyncio.to_thread(
+        _transcribe_voice_file,
+        file_path,
     )
 
 
@@ -1657,59 +2162,14 @@ async def handle_ai(
 # Voice Handler
 # ============================================================
 
-async def transcribe_voice(file_path):
+async def handle_voice( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
 
-    if not GEMINI_API_KEY:
-        return ""
+    if not update.message:
+        return
 
-    if not voice_client:
-        return ""
+    voice = update.message.voice
 
-    try:
-
-        uploaded = await asyncio.to_thread(
-            voice_client.files.upload,
-            file=file_path,
-        )
-
-        response = await asyncio.to_thread(
-            voice_client.models.generate_content,
-            model=VOICE_MODEL,
-            contents=[
-                uploaded,
-                (
-                    "حوّل التسجيل الصوتي إلى نص عربي واضح. "
-                    "اكتب النص فقط بدون شرح."
-                ),
-            ],
-        )
-
-        text = getattr(
-            response,
-            "text",
-            "",
-        )
-
-        return (
-            text.strip()
-            if text
-            else ""
-        )
-
-    except Exception:
-
-        logger.exception(
-            "Voice transcription failed."
-        )
-
-        return ""
-
-
-async def handle_voice(update, context):
-
-    message = update.message
-
-    if not message or not message.voice:
+    if not voice:
         return
 
     if not await check_access(
@@ -1718,25 +2178,35 @@ async def handle_voice(update, context):
     ):
         return
 
+    status = await update.message.reply_text(
+
+        "🎙️ استلمت التسجيل الصوتي.\n"
+        "⏳ جاري استخراج الكلام إلى نص..."
+
+    )
+
     temp_path = None
 
     try:
 
-        voice = await message.voice.get_file()
+        telegram_file = await context.bot.get_file(
+            voice.file_id
+        )
 
         with tempfile.NamedTemporaryFile(
             suffix=".ogg",
             delete=False,
-        ) as tmp:
+        ) as temp_file:
 
-            temp_path = tmp.name
+            temp_path = temp_file.name
 
-        await voice.download_to_drive(
+        await telegram_file.download_to_drive(
             custom_path=temp_path
         )
 
-        await message.reply_text(
-            "⏳ جاري تحويل التسجيل إلى نص..."
+        logger.info(
+            "Voice downloaded: %s",
+            temp_path,
         )
 
         text = await transcribe_voice(
@@ -1745,551 +2215,81 @@ async def handle_voice(update, context):
 
         if not text:
 
-            await message.reply_text(
-                "❌ ما قدرت أستخرج النص من التسجيل."
+            await status.edit_text(
+                "❌ ما قدرت أستخرج كلام واضح من التسجيل."
             )
 
             return
 
-        context.user_data[
-            "ai_text"
-        ] = text
+        context.user_data["ai_text"] = text
 
-        await message.reply_text(
-            (
-                "🎙️ <b>النص المستخرج:</b>\n\n"
-                f"{text}\n\n"
-                "اختر نوع التحليل:"
-            ),
-            parse_mode="HTML",
-            reply_markup=ai_markup(),
-        )
+        if len(text) <= 3900:
 
-    except Exception:
+            await status.edit_text(
 
-        logger.exception(
-            "Voice handler failed."
-        )
+                "🎙️ النص المستخرج:\n\n"
+                + text
 
-        await message.reply_text(
-            "❌ صار خطأ أثناء معالجة التسجيل."
-        )
+            )
 
-    finally:
+        else:
 
-        if temp_path:
+            await status.edit_text(
 
-            try:
-                os.remove(
-                    temp_path
+                "🎙️ النص المستخرج:\n\n"
+                + text[:3900]
+
+            )
+
+            remaining = text[3900:]
+
+            while remaining:
+
+                chunk = remaining[:3900]
+                remaining = remaining[3900:]
+
+                await update.message.reply_text(
+                    chunk
                 )
-            except Exception:
-                pass
-
-
-# ============================================================
-# Image OCR Handler
-# ============================================================
-
-async def analyze_image(file_path):
-
-    if not GEMINI_API_KEY:
-        return ""
-
-    if not image_client:
-        return ""
-
-    try:
-
-        uploaded = await asyncio.to_thread(
-            image_client.files.upload,
-            file=file_path,
-        )
-
-        response = await asyncio.to_thread(
-            image_client.models.generate_content,
-            model=IMAGE_MODEL,
-            contents=[
-                uploaded,
-                (
-                    "استخرج النص الموجود في الصورة "
-                    "بدقة، وحافظ على علامات الترقيم "
-                    "والحركات إن كانت واضحة. "
-                    "أخرج النص فقط."
-                ),
-            ],
-        )
-
-        text = getattr(
-            response,
-            "text",
-            "",
-        )
-
-        return (
-            text.strip()
-            if text
-            else ""
-        )
-
-    except Exception:
-
-        logger.exception(
-            "Image OCR failed."
-        )
-
-        return ""
-
-
-async def handle_photo(update, context):
-
-    message = update.message
-
-    if not message or not message.photo:
-        return
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    temp_path = None
-
-    try:
-
-        photo = message.photo[-1]
-
-        file = await photo.get_file()
-
-        with tempfile.NamedTemporaryFile(
-            suffix=".jpg",
-            delete=False,
-        ) as tmp:
-
-            temp_path = tmp.name
-
-        await file.download_to_drive(
-            custom_path=temp_path
-        )
-
-        await message.reply_text(
-            "⏳ جاري قراءة النص من الصورة..."
-        )
-
-        text = await analyze_image(
-            temp_path
-        )
-
-        if not text:
-
-            await message.reply_text(
-                "❌ ما قدرت أقرأ النص من الصورة."
-            )
-
-            return
-
-        context.user_data[
-            "ai_text"
-        ] = text
-
-        await message.reply_text(
-            (
-                "🖼️ <b>النص المستخرج:</b>\n\n"
-                f"{text}\n\n"
-                "اختر نوع التحليل:"
-            ),
-            parse_mode="HTML",
-            reply_markup=ai_markup(),
-        )
-
-    except Exception:
-
-        logger.exception(
-            "Photo handler failed."
-        )
-
-        await message.reply_text(
-            "❌ صار خطأ أثناء معالجة الصورة."
-        )
-
-    finally:
-
-        if temp_path:
-
-            try:
-                os.remove(
-                    temp_path
-                )
-            except Exception:
-                pass
-
-
-# ============================================================
-# Text Handler
-# ============================================================
-
-async def handle_text(update, context):
-
-    message = update.message
-
-    if not message:
-        return
-
-    if not message.text:
-        return
-
-    text = message.text.strip()
-
-    if not text:
-        return
-
-    # Library input
-    if context.user_data.get(
-        "waiting_library_query"
-    ):
-        await library_search(
-            update,
-            context,
-        )
-        return
-
-    # Character input
-    if context.user_data.get(
-        "waiting_character"
-    ):
-        await character_search(
-            update,
-            context,
-        )
-        return
-
-    # Save text for AI
-    context.user_data[
-        "ai_text"
-    ] = text
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    await message.reply_text(
-        (
-            "📝 <b>تم استلام النص.</b>\n\n"
-            "اختار شنو تريد أسوي بالنص:"
-        ),
-        parse_mode="HTML",
-        reply_markup=ai_markup(),
-    )
-
-
-# ============================================================
-# Start
-# ============================================================
-
-async def start(update, context):
-
-    if not update.message:
-        return
-
-    user = update.effective_user
-
-    if user:
-
-        try:
-
-            db.upsert_user(
-                user.id,
-                user.full_name,
-                user.username,
-            )
-
-        except Exception:
-
-            logger.exception(
-                "Failed to save start user."
-            )
-
-    if not await check_access(
-        update,
-        context,
-    ):
-        return
-
-    await update.message.reply_text(
-        (
-            "👋 أهلاً وسهلاً بك\n\n"
-            "📚 هذا البوت مخصص لخدمة اللغة العربية "
-            "والدراسة والتحليل.\n\n"
-            "اختر من القائمة:"
-        ),
-        reply_markup=main_menu(
-            user.id
-            if user
-            else 0
-        ),
-    )
-
-
-# ============================================================
-# Cancel
-# ============================================================
-
-async def cancel(update, context):
-
-    context.user_data.pop(
-        "waiting_library_query",
-        None,
-    )
-
-    context.user_data.pop(
-        "waiting_character",
-        None,
-    )
-
-    context.user_data.pop(
-        "ai_text",
-        None,
-    )
-
-    if update.message:
 
         await update.message.reply_text(
-            "تم الإلغاء.",
-            reply_markup=main_menu(
-                update.effective_user.id
-            ),
+
+            "🤖 شنو تريد أسوي للنص؟\n\n"
+            "اختر نوع التحليل:",
+
+            reply_markup=ai_markup(),
+
         )
 
+    except Exception as error:
 
-# ============================================================
-# Callback Router
-# ============================================================
+        logger.exception(
+            "Voice transcription error."
+        )
 
-async def callback_router(update, context):
+        error_text = str(error).upper()
 
-    q = update.callback_query
-
-    if not q:
-        return
-
-    data = q.data or ""
-
-    if data == "m":
-
-        await safe_answer(q)
-
-        if not await check_access(
-            update,
-            context,
+        if (
+            "429" in error_text
+            or "RESOURCE_EXHAUSTED" in error_text
         ):
-            return
 
-        await show(
-            q,
-            "🏠 <b>القائمة الرئيسية</b>",
-            main_menu(
-                q.from_user.id
-            ),
-        )
+            error_message = (
 
-        return
+                "⚠️ تم الوصول إلى حد الطلبات مؤقتاً.\n\n"
+                "انتظر قليلاً وحاول مرة ثانية."
 
-    if data == "library":
-
-        await library_start(
-            update,
-            context,
-        )
-
-        return
-
-    if data == "character":
-
-        await character_start(
-            update,
-            context,
-        )
-
-        return
-
-    if data.startswith(
-        "character:detail:"
-    ):
-
-        name = data.split(
-            "character:detail:",
-            1,
-        )[1]
-
-        await character_detail(
-            update,
-            context,
-            name,
-        )
-
-        return
-
-    if data == "outfit":
-
-        await outfit_start(
-            update,
-            context,
-        )
-
-        return
-
-    if data.startswith(
-        "outfit:"
-    ):
-
-        parts = data.split(":")
-
-        if len(parts) == 2:
-
-            await outfit_gender(
-                update,
-                context,
-                parts[1],
             )
 
-            return
+        elif (
+            "503" in error_text
+            or "UNAVAILABLE" in error_text
+        ):
 
-        if len(parts) == 4:
+            error_message = (
 
-            action = parts[1]
-            gender = parts[2]
-            style = parts[3]
-
-            if action == "style":
-
-                await outfit_style(
-                    update,
-                    context,
-                    gender,
-                    style,
-                )
-
-                return
-
-            if action == "generate":
-
-                await outfit_generate(
-                    update,
-                    context,
-                    gender,
-                    style,
-                )
-
-                return
-
-    if data.startswith(
-        "ai:"
-    ):
-
-        mode = data.split(
-            "ai:",
-            1,
-        )[1]
-
-        await handle_ai(
-            update,
-            context,
-            mode,
-        )
-
-        return
-
-    await safe_answer(q)
-
-
-# ============================================================
-# Application
-# ============================================================
-
-def build_application():
-
-    if not BOT_TOKEN:
-
-        raise RuntimeError(
-            "BOT_TOKEN is not configured."
-        )
-
-    application = (
-        Application
-        .builder()
-        .token(BOT_TOKEN)
-        .build()
-    )
-
-    application.add_handler(
-        CommandHandler(
-            "start",
-            start,
-        )
-    )
-
-    application.add_handler(
-        CommandHandler(
-            "cancel",
-            cancel,
-        )
-    )
-
-    application.add_handler(
-        CallbackQueryHandler(
-            callback_router,
-        )
-    )
-
-    application.add_handler(
-        MessageHandler(
-            filters.VOICE,
-            handle_voice,
-        )
-    )
-
-    application.add_handler(
-        MessageHandler(
-            filters.PHOTO,
-            handle_photo,
-        )
-    )
-
-    application.add_handler(
-        MessageHandler(
-            filters.TEXT
-            & ~filters.COMMAND,
-            handle_text,
-        )
-    )
-
-    return application
-
-
-# ============================================================
-# Main
-# ============================================================
-
-def main():
-
-    logger.info(
-        "Starting Telegram bot..."
-    )
-
-    application = build_application()
-
-    application.run_polling(
-        drop_pending_updates=True,
-    )
-
-
-if __name__ == "__main__":
-
-    main()
-                    "حاول مرة ثانية 🔄"
+                "⚠️ Gemini مشغول حالياً.\n\n"
+                "حاول مرة ثانية 🔄"
 
             )
 
@@ -2789,7 +2789,7 @@ def _generate_grammar_question():
 
         generation_config={
             "thinking_level": "minimal",
-                        "max_output_tokens": 700,
+            "max_output_tokens": 700,
         },
 
     )
@@ -3289,7 +3289,8 @@ async def handle_grammar_challenge_answer( update, context, answer_index, ):
     correct_text = options[correct]
 
     if selected == correct:
-                challenge[
+
+        challenge[
             "correct_count"
         ] = challenge.get(
             "correct_count",
@@ -3788,7 +3789,8 @@ async def show_weather( update, context, ):
     )
 
     try:
-               data = await weather.get_weather()
+
+        data = await weather.get_weather()
 
         text = weather.format_weather(data)
 
@@ -3806,7 +3808,7 @@ async def show_weather( update, context, ):
                     [
                         InlineKeyboardButton(
                             "🏠 القائمة الرئيسية",
-                            callback_data="m"
+                            callback_data="m",
                         )
                     ],
                 ]
@@ -4174,7 +4176,6 @@ async def handle_text( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
         context.user_data.pop("library_await", None)
 
         query = text
-
         await update.message.reply_text(
             library.format_search_result(query),
             reply_markup=InlineKeyboardMarkup([
@@ -4204,7 +4205,6 @@ async def handle_text( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
                 ],
             ]),
         )
-
         return
 
     # --------------------------------------------------------
@@ -4252,7 +4252,6 @@ async def handle_text( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
             result,
             reply_markup=InlineKeyboardMarkup(buttons),
         )
-
         return
 
     # --------------------------------------------------------
@@ -4287,7 +4286,8 @@ async def handle_text( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
             await reports.handle_report_request(
                 update,
                 context,
-            ) 
+            )
+
             return
 
         if is_admin(
@@ -4511,12 +4511,7 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
             "اكتب اسم الكتاب أو اسم المؤلف، وسأجهز لك روابط البحث في المكتبة الشاملة ومكتبة نور.\n\n"
             "📌 إذا كانت هناك نسخة PDF متاحة قانونياً من المصدر، استخدم رابط التحميل الذي يتيحه المصدر.",
             InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        "❌ إلغاء",
-                        callback_data="m"
-                    ),
-                ],
+                [InlineKeyboardButton("❌ إلغاء", callback_data="m")],
             ]),
         )
 
@@ -4528,37 +4523,22 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
 
         await safe_answer(q)
 
-        name = str(
-            context.user_data.get(
-                "character_name",
-                ""
-            )
-        ).strip()
-
+        name = str(context.user_data.get("character_name", "")).strip()
         if not name:
-
             return await show(
                 q,
                 "❌ لم أتمكن من تحديد اسم الشخصية.",
                 InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton(
-                            "⬅️ رجوع",
-                            callback_data="character"
-                        )
-                    ],
+                    [InlineKeyboardButton("⬅️ رجوع", callback_data="character")]
                 ]),
             )
 
         await show(
             q,
-            "📚 حياته وآثاره\n\n"
-            "⏳ جاري إعداد السيرة التفصيلية...",
+            "📚 حياته وآثاره\n\n⏳ جاري إعداد السيرة التفصيلية...",
         )
 
-        ok, result = await character.get_character_detail(
-            name
-        )
+        ok, result = await character.get_character_detail(name)
 
         buttons = [
             [
@@ -4604,12 +4584,7 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
             "اكتب اسم الشخصية، وسأعرض لك نبذة موثقة قدر الإمكان عن حياتها ومكانتها وآثارها.\n\n"
             "بعد ظهور النبذة ستجد زر 📚 حياته وآثاره للتوسع في السيرة.",
             InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        "❌ إلغاء",
-                        callback_data="m"
-                    ),
-                ],
+                [InlineKeyboardButton("❌ إلغاء", callback_data="m")],
             ]),
         )
 
@@ -4812,7 +4787,32 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
             )
 
             return
-                # ========================================================
+
+    if data.startswith("sd:"):
+
+        await safe_answer(q)
+
+        try:
+
+            sum_id = int(
+                data.split(
+                    ":",
+                    1
+                )[1]
+            )
+
+        except ValueError:
+
+            return
+
+        return await send_summary(
+            q,
+            sum_id,
+        )
+
+    # ========================================================
+    # Quizzes
+    # ========================================================
 
     if data == "qm":
 
