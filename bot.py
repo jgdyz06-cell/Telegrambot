@@ -293,22 +293,26 @@ def main_menu(user_id):
             InlineKeyboardButton(
                 "📚 مكتبة الكتب",
                 callback_data="library",
+                style="primary",
             ),
             InlineKeyboardButton(
                 "🏺 سير الأعلام",
                 callback_data="character",
+                style="success",
             ),
         ])
         rows.append([
             InlineKeyboardButton(
                 "📝 مفكرة الطالب (مهامي)",
                 callback_data="tasks",
+                style="primary",
             ),
         ])
         rows.append([
             InlineKeyboardButton(
                 "🏛️ قرارات وزارة التعليم",
                 callback_data="ministry",
+                style="danger",
             ),
         ])
         return InlineKeyboardMarkup(rows)
@@ -5252,6 +5256,8 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
                 ]),
             )
 
+        # عرض حالة التحميل ثم إرسال النتيجة كنص عادي حتى لا تظهر وسوم HTML
+        # أو يتأثر اتجاه النص العربي بـ Markdown.
         await show(
             q,
             "📚 حياته وآثاره\n\n⏳ جاري إعداد السيرة التفصيلية...",
@@ -5282,11 +5288,26 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
             ],
         ]
 
-        return await show(
-            q,
-            result,
-            InlineKeyboardMarkup(buttons),
-        )
+        # نستخدم edit_message_text مباشرة مع parse_mode=None؛
+        # هذا يمنع ظهور <b> وأي تنسيق HTML/Markdown للمستخدم.
+        try:
+            await q.edit_message_text(
+                result,
+                reply_markup=InlineKeyboardMarkup(buttons),
+                parse_mode=None,
+            )
+        except Exception:
+            # إذا تعذر تعديل الرسالة الأصلية، أرسل النتيجة كرسالة جديدة.
+            try:
+                await q.message.reply_text(
+                    result,
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                    parse_mode=None,
+                )
+            except Exception:
+                logger.exception("Failed to send character detailed biography.")
+
+        return
 
     # ========================================================
     # Character Biography
