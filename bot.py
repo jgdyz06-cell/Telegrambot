@@ -67,7 +67,7 @@ class _LibraryModule:
     NOOR_BASE = "https://www.noor-book.com/"
     SHAMELA_BASE = "https://shamela.ws/"
 
-@staticmethod
+    @staticmethod
     def _clean_query(query):
         return " ".join(str(query or "").strip().split())[:300]
 
