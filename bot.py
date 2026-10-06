@@ -57,6 +57,7 @@ from ui import (
     monthly_section_markup,
     show_monthly_subjects,
     show_monthly_images,
+    study_section_markup,
 )
 
 from ai import ask_ai
@@ -3961,12 +3962,10 @@ async def start( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
 
     await update.message.reply_text(
 
-        "🎓 أهلاً وسهلاً بك\n\n"
-        "اختر من القائمة:",
+        "🎓 أهلاً وسهلاً بك في قطوف الأكلم 📚\n\n"
+        "اختر نوع الدراسة حتى نعرض لك المحتوى المناسب:",
 
-        reply_markup=main_menu(
-            user.id
-        ),
+        reply_markup=study_section_markup(),
 
     )
 
@@ -4092,16 +4091,26 @@ async def show_main_menu( update, context, ):
     ):
         return
 
+    section = context.user_data.get("section")
+
+    section_name = (
+        "☀️ صباحي"
+        if section == "morning"
+        else "🌙 مسائي"
+        if section == "evening"
+        else ""
+    )
+
+    title = (
+        f"🎓 القائمة الرئيسية — {section_name}:"
+        if section_name
+        else "🎓 القائمة الرئيسية:"
+    )
+
     await show(
-
         q,
-
-        "🎓 القائمة الرئيسية:",
-
-        main_menu(
-            q.from_user.id
-        ),
-
+        title,
+        main_menu(q.from_user.id),
     )
 
 
@@ -4527,6 +4536,35 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
         context,
     ):
         return
+
+    # ========================================================
+    # اختيار الدراسة: صباحي / مسائي
+    # ========================================================
+
+    if data in ("section:morning", "section:evening"):
+
+        await safe_answer(q)
+
+        section = (
+            "morning"
+            if data == "section:morning"
+            else "evening"
+        )
+
+        context.user_data["section"] = section
+
+        section_name = (
+            "☀️ الدراسة الصباحية"
+            if section == "morning"
+            else "🌙 الدراسة المسائية"
+        )
+
+        return await show(
+            q,
+            f"✅ تم اختيار {section_name}\n\n"
+            "اختر الخدمة التي تريدها:",
+            main_menu(q.from_user.id),
+        )
 
     # ========================================================
     # Main menu
