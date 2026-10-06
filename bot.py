@@ -2513,6 +2513,110 @@ async def extract_text_from_image( file_path, mime_type, ):
 
 
 # ============================================================
+# Monthly Questions - Helpers
+# ============================================================
+
+async def show_monthly_subject_picker(q, quiz_type, section):
+    """عرض المواد التي تحتوي على صور أسئلة شهرية."""
+    rows = []
+
+    try:
+        subjects = db.subjects()
+    except Exception:
+        logger.exception("Could not load subjects for monthly questions.")
+        subjects = []
+
+    for subject in subjects:
+        try:
+            sid = int(subject["id"])
+            count = db.count_monthly_question_images(
+                sid, quiz_type, section
+            )
+        except Exception:
+            logger.exception("Could not count monthly images.")
+            continue
+
+        if count:
+            rows.append([
+                InlineKeyboardButton(
+                    f"{subject['name']} ({count})",
+                    callback_data=f"mqi:{quiz_type}:{section}:{sid}",
+                )
+            ])
+
+    rows.append([
+        InlineKeyboardButton(
+            "🔙 القائمة الرئيسية",
+            callback_data="m",
+        )
+    ])
+
+    title = (
+        "☀️ الأسئلة الشهرية الصباحية"
+        if section == db.SECTION_MORNING
+        else "🌙 الأسئلة الشهرية المسائية"
+    )
+
+    if not rows[:-1]:
+        text = f"{title}\n\n❌ حالياً ماكو أسئلة مضافة."
+    else:
+        text = f"{title}\n\n📚 اختر المادة:"
+
+    return await show(q, text, InlineKeyboardMarkup(rows))
+
+
+async def send_monthly_images(q, sid, quiz_type, section):
+    """إرسال صور الأسئلة الشهرية كما رفعها الأدمن، بدون OCR أو AI."""
+    try:
+        items = db.monthly_question_images(sid, quiz_type, section)
+    except Exception:
+        logger.exception("Could not load monthly question images.")
+        return await show(
+            q,
+            "❌ تعذر تحميل الأسئلة الشهرية حالياً.",
+            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع", callback_data="m")]]),
+        )
+
+    if not items:
+        return await show(
+            q,
+            "❌ ماكو أسئلة مضافة لهذه المادة حالياً.",
+            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع", callback_data=f"qm_{section}")]]),
+        )
+
+    subject = db.get_subject(sid)
+    subject_name = subject["name"] if subject else "المادة"
+    title = (
+        "☀️ الأسئلة الشهرية الصباحية"
+        if section == db.SECTION_MORNING
+        else "🌙 الأسئلة الشهرية المسائية"
+    )
+
+    # إبقاء رسالة الأزرار كما هي، ثم إرسال الصور نفسها من Telegram.
+    await show(
+        q,
+        f"{title}\n\n📚 {subject_name}\n\n"
+        f"📷 عدد الصور: {len(items)}\n\n"
+        "الأسئلة معروضة كما رفعها الأدمن.",
+        InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 رجوع", callback_data=f"qm_{section}")],
+            [InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="m")],
+        ]),
+    )
+
+    for item in items:
+        file_id = item["file_id"] if isinstance(item, dict) else item["file_id"]
+        caption = item["caption"] if isinstance(item, dict) else item["caption"]
+        try:
+            await q.message.reply_photo(
+                photo=file_id,
+                caption=caption,
+            )
+        except Exception:
+            logger.exception("Could not send monthly question image.")
+
+
+# ============================================================
 # Image Handler
 # ============================================================
 
@@ -2540,18 +2644,68 @@ async def handle_image( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
     # Admin monthly-question image upload
     # Must run before the normal AI image/OCR handler.
     # --------------------------------------------------------
+    monthly_state = context.user_data.get("monthly_image_upload")
     aw = context.user_data.get("await")
 
+    # مهم جداً: صور الأسئلة الشهرية لا تمر على Gemini/OCR.
+    # نحفظ Telegram file_id مباشرة في قاعدة البيانات.
+    if (
+        monthly_state
+        and is_admin(message.from_user.id)
+        and monthly_state.get("type") == "monthly_image"
+    ):
+        sid = monthly_state.get("sid")
+        quiz_type = monthly_state.get("quiz_type")
+        section = monthly_state.get("section", db.SECTION_SHARED)
+
+        if not sid or quiz_type not in (db.MONTHLY_PREVIOUS, db.MONTHLY_CURRENT):
+            context.user_data.pop("monthly_image_upload", None)
+            context.user_data.pop("await", None)
+            return await message.reply_text("❌ بيانات إضافة الأسئلة الشهرية غير صالحة. ابدأ من لوحة الأدمن من جديد.")
+
+        if not message.photo:
+            return await message.reply_text(
+                "⚠️ أرسل الأسئلة كصورة من Telegram، وليس كملف.\n\nللإلغاء: /cancel"
+            )
+
+        file_id = message.photo[-1].file_id
+        caption = (message.caption or "").strip() or None
+
+        try:
+            image_id = db.add_monthly_question_image(
+                sid=sid,
+                quiz_type=quiz_type,
+                section=section,
+                file_id=file_id,
+                caption=caption,
+            )
+        except Exception:
+            logger.exception("Could not save monthly question image.")
+            return await message.reply_text("❌ ما انحفظت الصورة حالياً. تأكد من قاعدة البيانات وحاول مرة ثانية.")
+
+        # نخلي حالة الإضافة فعالة حتى يقدر الأدمن يرسل صور متعددة.
+        type_name = "📚 أسئلة شهرية سابقة"
+        if quiz_type == db.MONTHLY_CURRENT and section == db.SECTION_MORNING:
+            type_name = "☀️ الأسئلة الشهرية الصباحية"
+        elif quiz_type == db.MONTHLY_CURRENT and section == db.SECTION_EVENING:
+            type_name = "🌙 الأسئلة الشهرية المسائية"
+
+        return await message.reply_text(
+            "✅ تم رفع الصورة وحفظها بنجاح.\n\n"
+            f"{type_name}\n"
+            f"🆔 رقم الصورة: {image_id}\n\n"
+            "أرسل صورة ثانية إذا تريد إضافة بقية الأسئلة.\n"
+            "للخروج: /cancel"
+        )
+
+    # التوافق مع الحالة القديمة إن كانت موجودة.
     if (
         aw
         and aw.get("type") == "monthly_image"
         and is_admin(message.from_user.id)
     ):
-        return await admin_msg.handle_admin_message(
-            update,
-            context,
-            aw,
-        )
+        context.user_data["monthly_image_upload"] = aw.copy()
+        return await handle_image(update, context)
 
     status = await message.reply_text(
 
@@ -3930,6 +4084,11 @@ async def start( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
     )
 
     context.user_data.pop(
+        "monthly_image_upload",
+        None,
+    )
+
+    context.user_data.pop(
         "ai_text",
         None,
     )
@@ -4860,6 +5019,46 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
         )
 
     # ========================================================
+    # Monthly / Final Questions
+    # ========================================================
+
+    if data == "qm_morning":
+        await safe_answer(q)
+        return await show_monthly_subject_picker(
+            q, db.MONTHLY_CURRENT, db.SECTION_MORNING
+        )
+
+    if data == "qm_evening":
+        await safe_answer(q)
+        return await show_monthly_subject_picker(
+            q, db.MONTHLY_CURRENT, db.SECTION_EVENING
+        )
+
+    if data == "qm_final":
+        await safe_answer(q)
+        return await show(
+            q,
+            "🏁 أسئلة الفاينل\n\n📚 اختر المادة:",
+            subjects_markup("qs", "q_count", "m"),
+        )
+
+    if data.startswith("mqi:"):
+        await safe_answer(q)
+        parts = data.split(":")
+        if len(parts) != 4:
+            return
+        quiz_type, section = parts[1], parts[2]
+        try:
+            sid = int(parts[3])
+        except (TypeError, ValueError):
+            return
+        if quiz_type not in (db.MONTHLY_PREVIOUS, db.MONTHLY_CURRENT):
+            return
+        if section not in (db.SECTION_SHARED, db.SECTION_MORNING, db.SECTION_EVENING):
+            return
+        return await send_monthly_images(q, sid, quiz_type, section)
+
+    # ========================================================
     # Quizzes
     # ========================================================
 
@@ -5061,12 +5260,15 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
         if not is_admin(q.from_user.id):
             return
 
-        return await admin.router(
-            q,
-            context,
-            "mi",
-            data.split(":", 1)[1],
-        )
+        arg = data.split(":", 1)[1]
+        result = await admin.router(q, context, "mi", arg)
+
+        # إذا اختار الأدمن الشهر السابق، نثبت حالة رفع الصورة أيضاً.
+        if arg == "previous":
+            aw_now = context.user_data.get("await")
+            if aw_now and aw_now.get("type") == "monthly_image":
+                context.user_data["monthly_image_upload"] = aw_now.copy()
+        return result
 
     if data.startswith("mis:"):
 
@@ -5075,12 +5277,13 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
         if not is_admin(q.from_user.id):
             return
 
-        return await admin.router(
-            q,
-            context,
-            "mis",
-            data.split(":", 1)[1],
-        )
+        arg = data.split(":", 1)[1]
+        result = await admin.router(q, context, "mis", arg)
+
+        aw_now = context.user_data.get("await")
+        if aw_now and aw_now.get("type") == "monthly_image":
+            context.user_data["monthly_image_upload"] = aw_now.copy()
+        return result
 
     # ========================================================
     # Admin - Users
