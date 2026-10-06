@@ -2517,14 +2517,19 @@ async def extract_text_from_image( file_path, mime_type, ):
 # ============================================================
 
 async def show_monthly_subject_picker(q, quiz_type, section):
-    """عرض المواد التي تحتوي على صور أسئلة شهرية."""
-    rows = []
+    """عرض قائمة المواد للأسئلة الشهرية.
 
+    تظهر كل المواد دائماً، ثم عند اختيار المادة يتم تحميل الصور
+    المحفوظة فعلياً من قاعدة البيانات. صور الأسئلة الشهرية لا تمر
+    على Gemini أو OCR.
+    """
     try:
         subjects = db.subjects()
     except Exception:
         logger.exception("Could not load subjects for monthly questions.")
         subjects = []
+
+    rows = []
 
     for subject in subjects:
         try:
@@ -2533,16 +2538,21 @@ async def show_monthly_subject_picker(q, quiz_type, section):
                 sid, quiz_type, section
             )
         except Exception:
-            logger.exception("Could not count monthly images.")
-            continue
+            logger.exception("Could not count monthly images for subject %s.", subject.get("id"))
+            count = 0
 
+        # نعرض المادة حتى لو عدد الصور = 0، حتى تكون قائمة المواد
+        # ظاهرة دائماً للمستخدم.
+        label = subject["name"]
         if count:
-            rows.append([
-                InlineKeyboardButton(
-                    f"{subject['name']} ({count})",
-                    callback_data=f"mqi:{quiz_type}:{section}:{sid}",
-                )
-            ])
+            label = f"{label} ({count} صورة)"
+
+        rows.append([
+            InlineKeyboardButton(
+                label,
+                callback_data=f"mqi:{quiz_type}:{section}:{sid}",
+            )
+        ])
 
     rows.append([
         InlineKeyboardButton(
@@ -2555,10 +2565,12 @@ async def show_monthly_subject_picker(q, quiz_type, section):
         "☀️ الأسئلة الشهرية الصباحية"
         if section == db.SECTION_MORNING
         else "🌙 الأسئلة الشهرية المسائية"
+        if section == db.SECTION_EVENING
+        else "📚 الأسئلة الشهرية السابقة"
     )
 
-    if not rows[:-1]:
-        text = f"{title}\n\n❌ حالياً ماكو أسئلة مضافة."
+    if not subjects:
+        text = f"{title}\n\n❌ ماكو مواد مضافة حالياً."
     else:
         text = f"{title}\n\n📚 اختر المادة:"
 
