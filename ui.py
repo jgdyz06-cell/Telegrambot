@@ -70,12 +70,12 @@ def main_menu(uid):
         # الأسئلة الخاصة بالأقسام
         [
             Btn(
-                "☀️ الأسئلة الصباحية",
+                "☀️ الأسئلة الشهرية الصباحية",
                 callback_data="qm_morning",
                 style="primary",
             ),
             Btn(
-                "🌙 الأسئلة المسائية",
+                "🌙 الأسئلة الشهرية المسائية",
                 callback_data="qm_evening",
                 style="success",
             ),
