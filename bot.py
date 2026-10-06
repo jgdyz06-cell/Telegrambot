@@ -292,10 +292,12 @@ def main_menu(user_id):
             InlineKeyboardButton(
                 "📚 مكتبة الكتب",
                 callback_data="library",
+                style="primary",
             ),
             InlineKeyboardButton(
                 "🏺 سير الأعلام",
                 callback_data="character",
+                style="success",
             ),
         ])
         return InlineKeyboardMarkup(rows)
@@ -2564,9 +2566,9 @@ async def show_monthly_subject_picker(q, quiz_type, section):
     ])
 
     title = (
-        "☀️ الأسئلة الشهرية الصباحية"
+        "☀️ الأسئلة الشهرية للدراسة الصباحية لهذا العام"
         if section == db.SECTION_MORNING
-        else "🌙 الأسئلة الشهرية المسائية"
+        else "🌙 الأسئلة الشهرية للدراسة المسائية لهذا العام"
         if section == db.SECTION_EVENING
         else "📚 الأسئلة الشهرية للأعوام السابقة"
     )
@@ -2601,9 +2603,9 @@ async def send_monthly_images(q, sid, quiz_type, section):
     subject = db.get_subject(sid)
     subject_name = subject["name"] if subject else "المادة"
     title = (
-        "☀️ الأسئلة الشهرية الصباحية"
+        "☀️ الأسئلة الشهرية للدراسة الصباحية لهذا العام"
         if section == db.SECTION_MORNING
-        else "🌙 الأسئلة الشهرية المسائية"
+        else "🌙 الأسئلة الشهرية للدراسة المسائية لهذا العام"
         if section == db.SECTION_EVENING
         else "📚 الأسئلة الشهرية للأعوام السابقة"
     )
@@ -2708,9 +2710,9 @@ async def handle_image( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
         # نخلي حالة الإضافة فعالة حتى يقدر الأدمن يرسل صور متعددة.
         type_name = "📚 الأسئلة الشهرية للأعوام السابقة"
         if quiz_type == db.MONTHLY_CURRENT and section == db.SECTION_MORNING:
-            type_name = "☀️ الأسئلة الشهرية الصباحية"
+            type_name = "☀️ الأسئلة الشهرية للدراسة الصباحية لهذا العام"
         elif quiz_type == db.MONTHLY_CURRENT and section == db.SECTION_EVENING:
-            type_name = "🌙 الأسئلة الشهرية المسائية"
+            type_name = "🌙 الأسئلة الشهرية للدراسة المسائية لهذا العام"
 
         return await message.reply_text(
             "✅ تم رفع الصورة وحفظها بنجاح.\n\n"
@@ -4137,12 +4139,7 @@ async def start( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
 
     await update.message.reply_text(
 
-        "🌹 يَا مَرْحَباً بِقُدُومِ مَنْ نُحِبُّهُمْ\n"
-        "وَنَطَرِّزُ الأَيَّامَ مِنْ إِجْلَالِهِمْ\n\n"
-        "حَلَلْتُمْ أَهْلاً وَوَطِئْتُمْ سَهْلاً\n"
-        "وَالنُّورُ فِيكُمْ زَادَ فِي إِقْبَالِكُمْ\n\n"
-        "ﷺ اللهم صلِّ وسلم وبارك على نبينا محمد ﷺ\n\n"
-        "🎓 أهلاً وسهلاً بك في قطوف الأكلم\n\n"
+        "🎓 أهلاً وسهلاً بك\n\n"
         "اختر من القائمة:",
 
         reply_markup=main_menu(
