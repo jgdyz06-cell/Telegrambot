@@ -53,11 +53,6 @@ from ui import (
     show,
     sub_markup,
     subjects_markup,
-    monthly_menu_markup,
-    monthly_section_markup,
-    show_monthly_subjects,
-    show_monthly_images,
-    study_section_markup,
 )
 
 from ai import ask_ai
@@ -2541,24 +2536,6 @@ async def handle_image( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
     ):
         return
 
-    # --------------------------------------------------------
-    # Admin monthly questions: save the Telegram photo directly
-    # --------------------------------------------------------
-    aw = context.user_data.get("await")
-
-    if (
-        aw
-        and aw.get("type") == "monthly_image"
-        and is_admin(update.effective_user.id)
-        and photo
-    ):
-        await admin_msg.handle_admin_message(
-            update,
-            context,
-            aw,
-        )
-        return
-
     status = await message.reply_text(
 
         "📷 استلمت الصورة.\n"
@@ -3962,10 +3939,12 @@ async def start( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
 
     await update.message.reply_text(
 
-        "🎓 أهلاً وسهلاً بك في قطوف الأكلم 📚\n\n"
-        "اختر نوع الدراسة حتى نعرض لك المحتوى المناسب:",
+        "🎓 أهلاً وسهلاً بك\n\n"
+        "اختر من القائمة:",
 
-        reply_markup=study_section_markup(),
+        reply_markup=main_menu(
+            user.id
+        ),
 
     )
 
@@ -4091,26 +4070,16 @@ async def show_main_menu( update, context, ):
     ):
         return
 
-    section = context.user_data.get("section")
-
-    section_name = (
-        "☀️ صباحي"
-        if section == "morning"
-        else "🌙 مسائي"
-        if section == "evening"
-        else ""
-    )
-
-    title = (
-        f"🎓 القائمة الرئيسية — {section_name}:"
-        if section_name
-        else "🎓 القائمة الرئيسية:"
-    )
-
     await show(
+
         q,
-        title,
-        main_menu(q.from_user.id),
+
+        "🎓 القائمة الرئيسية:",
+
+        main_menu(
+            q.from_user.id
+        ),
+
     )
 
 
@@ -4430,6 +4399,100 @@ async def handle_document( update: Update, context: ContextTypes.DEFAULT_TYPE, )
 
 
 # ============================================================
+# Monthly Questions - Morning / Evening
+# ============================================================
+
+def monthly_subjects_markup(section):
+
+    rows = []
+
+    for subject in db.subjects():
+        count = db.count_monthly_question_images(
+            subject["id"],
+            db.MONTHLY_CURRENT,
+            section,
+        )
+
+        if count <= 0:
+            continue
+
+        rows.append([
+            InlineKeyboardButton(
+                f"{subject['name']} ({count})",
+                callback_data=f"mqi:{section}:{subject['id']}",
+            )
+        ])
+
+    rows.append([
+        InlineKeyboardButton(
+            "🔙 رجوع",
+            callback_data="m",
+        )
+    ])
+
+    return InlineKeyboardMarkup(rows)
+
+
+async def show_monthly_images(update, context, section, sid):
+
+    q = update.callback_query
+
+    if not q:
+        return
+
+    await safe_answer(q)
+
+    if not await check_access(update, context):
+        return
+
+    subject = db.get_subject(sid)
+
+    if not subject:
+        return await show(
+            q,
+            "⚠️ المادة غير موجودة.",
+            InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 رجوع", callback_data=f"qm_{section}")]
+            ]),
+        )
+
+    images = db.monthly_question_images(
+        sid,
+        db.MONTHLY_CURRENT,
+        section,
+    )
+
+    if not images:
+        return await show(
+            q,
+            f"⚠️ ماكو أسئلة {('صباحية' if section == 'morning' else 'مسائية')} مضافة لمادة {subject['name']} حالياً.",
+            InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 رجوع", callback_data=f"qm_{section}")]
+            ]),
+        )
+
+    await show(
+        q,
+        f"📝 أسئلة {('الصباحية' if section == 'morning' else 'المسائية')} — {subject['name']}\n\nجاري إرسال الأسئلة...",
+    )
+
+    for index, item in enumerate(images, 1):
+        caption = item["caption"] or f"📝 السؤال {index} — {subject['name']}"
+        await q.message.reply_photo(
+            item["file_id"],
+            caption=caption,
+        )
+
+    await q.message.reply_text(
+        "✅ انتهت أسئلة المادة.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 مادة أخرى", callback_data=f"qm_{section}")],
+            [InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="m")],
+        ]),
+    )
+
+
+# ============================================================
 # Callback Router
 # ============================================================
 
@@ -4536,35 +4599,6 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
         context,
     ):
         return
-
-    # ========================================================
-    # اختيار الدراسة: صباحي / مسائي
-    # ========================================================
-
-    if data in ("section:morning", "section:evening"):
-
-        await safe_answer(q)
-
-        section = (
-            "morning"
-            if data == "section:morning"
-            else "evening"
-        )
-
-        context.user_data["section"] = section
-
-        section_name = (
-            "☀️ الدراسة الصباحية"
-            if section == "morning"
-            else "🌙 الدراسة المسائية"
-        )
-
-        return await show(
-            q,
-            f"✅ تم اختيار {section_name}\n\n"
-            "اختر الخدمة التي تريدها:",
-            main_menu(q.from_user.id),
-        )
 
     # ========================================================
     # Main menu
@@ -4906,116 +4940,80 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
     # Quizzes
     # ========================================================
 
-    if data == "qm":
+    if data == "qm_morning":
 
         await safe_answer(q)
 
         return await show(
             q,
-            "📝 الاختبارات والأسئلة الشهرية:",
-            monthly_menu_markup(),
+            "☀️ الأسئلة الصباحية\n\nاختر المادة:",
+            monthly_subjects_markup("morning"),
         )
 
-    if data == "iqm":
+    if data == "qm_evening":
 
         await safe_answer(q)
 
         return await show(
             q,
-            "🎯 اختر المادة للاختبار:",
+            "🌙 الأسئلة المسائية\n\nاختر المادة:",
+            monthly_subjects_markup("evening"),
+        )
+
+    if data == "qm_final":
+
+        await safe_answer(q)
+
+        return await show(
+            q,
+            "🏁 أسئلة الفاينل\n\nاختر المادة:",
             subjects_markup(
                 "qs",
                 "q_count",
-                "qm",
+                "m",
             ),
         )
 
-    if data == "mq:previous":
-
-        await safe_answer(q)
-
-        return await show_monthly_subjects(
-            q,
-            db.MONTHLY_PREVIOUS,
-            db.SECTION_SHARED,
-        )
-
-    if data == "mq:current":
-
-        await safe_answer(q)
-
-        return await show(
-            q,
-            "📝 أسئلة الشهر الحالي:",
-            monthly_section_markup(),
-        )
-
-    if data.startswith("mqs:"):
-
-        await safe_answer(q)
+    if data.startswith("mqi:"):
 
         parts = data.split(":")
 
         if len(parts) != 3:
             return
 
-        quiz_type = parts[1]
-        section = parts[2]
-
-        if quiz_type not in (
-            db.MONTHLY_PREVIOUS,
-            db.MONTHLY_CURRENT,
-        ):
-            return
-
-        if section not in (
-            db.SECTION_SHARED,
-            db.SECTION_MORNING,
-            db.SECTION_EVENING,
-        ):
-            return
-
-        return await show_monthly_subjects(
-            q,
-            quiz_type,
-            section,
-        )
-
-    if data.startswith("mqi:"):
-
-        await safe_answer(q)
-
-        parts = data.split(":")
-
-        if len(parts) != 4:
-            return
-
-        quiz_type = parts[1]
-        section = parts[2]
+        section = parts[1]
 
         try:
-            sid = int(parts[3])
+            sid = int(parts[2])
         except ValueError:
             return
 
-        if quiz_type not in (
-            db.MONTHLY_PREVIOUS,
-            db.MONTHLY_CURRENT,
-        ):
-            return
-
-        if section not in (
-            db.SECTION_SHARED,
-            db.SECTION_MORNING,
-            db.SECTION_EVENING,
-        ):
+        if section not in ("morning", "evening"):
             return
 
         return await show_monthly_images(
-            q,
-            sid,
-            quiz_type,
+            update,
+            context,
             section,
+            sid,
+        )
+
+    if data == "qm":
+
+        await safe_answer(q)
+
+        return await show(
+
+            q,
+
+            "📝 اختر المادة:",
+
+            subjects_markup(
+                "qs",
+                "q_count",
+                "m",
+            ),
+
         )
 
     if data.startswith("qs:"):
@@ -5276,38 +5274,6 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
             context,
             "ap",
             data[3:],
-        )
-
-    if data.startswith("mi:"):
-
-        await safe_answer(q)
-
-        if not is_admin(
-            q.from_user.id
-        ):
-            return
-
-        return await admin.router(
-            q,
-            context,
-            "mi",
-            data[3:],
-        )
-
-    if data.startswith("mis:"):
-
-        await safe_answer(q)
-
-        if not is_admin(
-            q.from_user.id
-        ):
-            return
-
-        return await admin.router(
-            q,
-            context,
-            "mis",
-            data[4:],
         )
 
     if data.startswith("ak:"):
