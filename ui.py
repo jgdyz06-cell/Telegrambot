@@ -91,6 +91,14 @@ def main_menu(uid):
         ],
 
         [
+            Btn(
+                "📚 الأسئلة الشهرية للأعوام السابقة",
+                callback_data="qm_previous",
+                style="primary",
+            ),
+        ],
+
+        [
             Btn("📊 نتائجي", callback_data="me", style="primary"),
             Btn("📅 الجدول الأسبوعي", callback_data="sc", style="primary"),
         ],
