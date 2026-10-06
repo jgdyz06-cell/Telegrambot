@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""قاعدة البيانات: المواد والملخصات + المستخدمون + الملابس."""
+"""قاعدة البيانات: المواد والملخصات + المستخدمون + الملابس + صور الأسئلة الشهرية."""
 
 import sqlite3
 
@@ -40,6 +40,18 @@ SEED_SUMMARIES = {
 }
 
 
+# ============================================================
+# أنواع صور الأسئلة الشهرية
+# ============================================================
+
+MONTHLY_PREVIOUS = "monthly_previous"
+MONTHLY_CURRENT = "monthly_current"
+
+SECTION_SHARED = "shared"
+SECTION_MORNING = "morning"
+SECTION_EVENING = "evening"
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS subjects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,6 +73,16 @@ CREATE TABLE IF NOT EXISTS questions (
     options TEXT NOT NULL,
     answer INTEGER NOT NULL,
     explanation TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS monthly_question_images (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    quiz_type TEXT NOT NULL,
+    section TEXT NOT NULL DEFAULT 'shared',
+    file_id TEXT NOT NULL,
+    caption TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS results (
@@ -96,6 +118,13 @@ ON wardrobe_items(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_wardrobe_user_gender
 ON wardrobe_items(user_id, gender);
+
+CREATE INDEX IF NOT EXISTS idx_monthly_question_images
+ON monthly_question_images(
+    subject_id,
+    quiz_type,
+    section
+);
 """
 
 
@@ -104,6 +133,7 @@ ON wardrobe_items(user_id, gender);
 # ============================================================
 
 def init():
+
     c = connect()
 
     try:
@@ -289,6 +319,162 @@ def delete_summary(sum_id):
     sql_run(
         "DELETE FROM summaries WHERE id = ?",
         (sum_id,),
+    )
+
+
+# ============================================================
+# صور الأسئلة الشهرية
+# ============================================================
+
+def add_monthly_question_image(
+    sid,
+    quiz_type,
+    section,
+    file_id,
+    caption=None,
+):
+    """
+    حفظ صورة من صور الأسئلة الشهرية.
+
+    quiz_type:
+        monthly_previous
+        monthly_current
+
+    section:
+        shared
+        morning
+        evening
+    """
+
+    return sql_run(
+        """
+        INSERT INTO monthly_question_images(
+            subject_id,
+            quiz_type,
+            section,
+            file_id,
+            caption
+        )
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            sid,
+            quiz_type,
+            section,
+            file_id,
+            caption,
+        ),
+    )
+
+
+def monthly_question_images(
+    sid,
+    quiz_type,
+    section=SECTION_SHARED,
+):
+    """
+    جلب صور الأسئلة الشهرية حسب المادة والنوع والقسم.
+    """
+
+    return sql_all(
+        """
+        SELECT *
+        FROM monthly_question_images
+        WHERE subject_id = ?
+          AND quiz_type = ?
+          AND section = ?
+        ORDER BY id
+        """,
+        (
+            sid,
+            quiz_type,
+            section,
+        ),
+    )
+
+
+def count_monthly_question_images(
+    sid,
+    quiz_type,
+    section=SECTION_SHARED,
+):
+    """
+    عدد صور الأسئلة الشهرية.
+    """
+
+    r = sql_one(
+        """
+        SELECT COUNT(*) AS n
+        FROM monthly_question_images
+        WHERE subject_id = ?
+          AND quiz_type = ?
+          AND section = ?
+        """,
+        (
+            sid,
+            quiz_type,
+            section,
+        ),
+    )
+
+    return int(r["n"]) if r else 0
+
+
+def get_monthly_question_image(
+    image_id,
+):
+    """
+    جلب صورة أسئلة شهرية واحدة.
+    """
+
+    return sql_one(
+        """
+        SELECT *
+        FROM monthly_question_images
+        WHERE id = ?
+        """,
+        (image_id,),
+    )
+
+
+def delete_monthly_question_image(
+    image_id,
+):
+    """
+    حذف صورة أسئلة شهرية واحدة.
+    """
+
+    sql_run(
+        """
+        DELETE FROM monthly_question_images
+        WHERE id = ?
+        """,
+        (image_id,),
+    )
+
+
+def clear_monthly_question_images(
+    sid,
+    quiz_type,
+    section=SECTION_SHARED,
+):
+    """
+    حذف جميع صور الأسئلة الشهرية
+    لنوع وقسم محدد.
+    """
+
+    sql_run(
+        """
+        DELETE FROM monthly_question_images
+        WHERE subject_id = ?
+          AND quiz_type = ?
+          AND section = ?
+        """,
+        (
+            sid,
+            quiz_type,
+            section,
+        ),
     )
 
 
