@@ -1,14 +1,19 @@
 -- coding: utf-8 --
+
 """رسائل الأدمن: إضافة مادة أو ملخص أو أسئلة."""
+
 from telegram import InlineKeyboardButton as Btn
 from telegram import InlineKeyboardMarkup as Markup
+
 import db
 from ui import back_markup
+
 def parse_summary(text):
 lines = [l.strip() for l in text.splitlines() if l.strip()]
 url = next((l for l in lines if l.lower().startswith("http")), None)
 title = next((l for l in lines if l != url), "ملخص")
 return title[:60], url
+
 def again_markup(label, data):
 return Markup(
 [
@@ -26,7 +31,9 @@ callback_data="ad",
 ],
 ]
 )
+
 async def handle_admin_message(update, context, aw):
+
 msg = update.message
 kind = aw["type"]
 
