@@ -2536,6 +2536,23 @@ async def handle_image( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
     ):
         return
 
+    # --------------------------------------------------------
+    # Admin monthly-question image upload
+    # Must run before the normal AI image/OCR handler.
+    # --------------------------------------------------------
+    aw = context.user_data.get("await")
+
+    if (
+        aw
+        and aw.get("type") == "monthly_image"
+        and is_admin(message.from_user.id)
+    ):
+        return await admin_msg.handle_admin_message(
+            update,
+            context,
+            aw,
+        )
+
     status = await message.reply_text(
 
         "📷 استلمت الصورة.\n"
@@ -4399,100 +4416,6 @@ async def handle_document( update: Update, context: ContextTypes.DEFAULT_TYPE, )
 
 
 # ============================================================
-# Monthly Questions - Morning / Evening
-# ============================================================
-
-def monthly_subjects_markup(section):
-
-    rows = []
-
-    for subject in db.subjects():
-        count = db.count_monthly_question_images(
-            subject["id"],
-            db.MONTHLY_CURRENT,
-            section,
-        )
-
-        if count <= 0:
-            continue
-
-        rows.append([
-            InlineKeyboardButton(
-                f"{subject['name']} ({count})",
-                callback_data=f"mqi:{section}:{subject['id']}",
-            )
-        ])
-
-    rows.append([
-        InlineKeyboardButton(
-            "🔙 رجوع",
-            callback_data="m",
-        )
-    ])
-
-    return InlineKeyboardMarkup(rows)
-
-
-async def show_monthly_images(update, context, section, sid):
-
-    q = update.callback_query
-
-    if not q:
-        return
-
-    await safe_answer(q)
-
-    if not await check_access(update, context):
-        return
-
-    subject = db.get_subject(sid)
-
-    if not subject:
-        return await show(
-            q,
-            "⚠️ المادة غير موجودة.",
-            InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 رجوع", callback_data=f"qm_{section}")]
-            ]),
-        )
-
-    images = db.monthly_question_images(
-        sid,
-        db.MONTHLY_CURRENT,
-        section,
-    )
-
-    if not images:
-        return await show(
-            q,
-            f"⚠️ ماكو أسئلة {('صباحية' if section == 'morning' else 'مسائية')} مضافة لمادة {subject['name']} حالياً.",
-            InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 رجوع", callback_data=f"qm_{section}")]
-            ]),
-        )
-
-    await show(
-        q,
-        f"📝 أسئلة {('الصباحية' if section == 'morning' else 'المسائية')} — {subject['name']}\n\nجاري إرسال الأسئلة...",
-    )
-
-    for index, item in enumerate(images, 1):
-        caption = item["caption"] or f"📝 السؤال {index} — {subject['name']}"
-        await q.message.reply_photo(
-            item["file_id"],
-            caption=caption,
-        )
-
-    await q.message.reply_text(
-        "✅ انتهت أسئلة المادة.",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔄 مادة أخرى", callback_data=f"qm_{section}")],
-            [InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="m")],
-        ]),
-    )
-
-
-# ============================================================
 # Callback Router
 # ============================================================
 
@@ -4940,64 +4863,6 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
     # Quizzes
     # ========================================================
 
-    if data == "qm_morning":
-
-        await safe_answer(q)
-
-        return await show(
-            q,
-            "☀️ الأسئلة الصباحية\n\nاختر المادة:",
-            monthly_subjects_markup("morning"),
-        )
-
-    if data == "qm_evening":
-
-        await safe_answer(q)
-
-        return await show(
-            q,
-            "🌙 الأسئلة المسائية\n\nاختر المادة:",
-            monthly_subjects_markup("evening"),
-        )
-
-    if data == "qm_final":
-
-        await safe_answer(q)
-
-        return await show(
-            q,
-            "🏁 أسئلة الفاينل\n\nاختر المادة:",
-            subjects_markup(
-                "qs",
-                "q_count",
-                "m",
-            ),
-        )
-
-    if data.startswith("mqi:"):
-
-        parts = data.split(":")
-
-        if len(parts) != 3:
-            return
-
-        section = parts[1]
-
-        try:
-            sid = int(parts[2])
-        except ValueError:
-            return
-
-        if section not in ("morning", "evening"):
-            return
-
-        return await show_monthly_images(
-            update,
-            context,
-            section,
-            sid,
-        )
-
     if data == "qm":
 
         await safe_answer(q)
@@ -5183,6 +5048,38 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
 
         return await reports.show_contact(
             q
+        )
+
+    # ========================================================
+    # Admin - Monthly Question Upload
+    # ========================================================
+
+    if data.startswith("mi:"):
+
+        await safe_answer(q)
+
+        if not is_admin(q.from_user.id):
+            return
+
+        return await admin.router(
+            q,
+            context,
+            "mi",
+            data.split(":", 1)[1],
+        )
+
+    if data.startswith("mis:"):
+
+        await safe_answer(q)
+
+        if not is_admin(q.from_user.id):
+            return
+
+        return await admin.router(
+            q,
+            context,
+            "mis",
+            data.split(":", 1)[1],
         )
 
     # ========================================================
