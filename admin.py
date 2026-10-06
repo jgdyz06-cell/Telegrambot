@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """لوحة الأدمن: القوائم والأزرار."""
 from telegram import InlineKeyboardButton as Btn
 from telegram import InlineKeyboardMarkup as Markup
@@ -146,22 +145,60 @@ async def router(q, context, action, arg):
         return await show(q, PICKER_TITLES.get(arg, "اختر المادة:"), Markup(rows))
 
     if action == "mi":
+        sid = context.user_data.get("monthly_sid")
+        if not sid:
+            return await show(q, "⚠️ انتهت جلسة اختيار المادة. ابدأ من لوحة الأدمن من جديد.", back_markup("ad"))
+
         if arg == "previous":
-            context.user_data["monthly_kind"] = {"quiz_type": db.MONTHLY_PREVIOUS, "section": db.SECTION_SHARED}
-            return await show(q, "📚 أسئلة شهرية سابقة\n\nأرسل الآن صورة الأسئلة.\n\n🖼️ أرسلها كصورة من Telegram.\nويمكنك إضافة وصف أو اسم للامتحان في الـ Caption.\n\nللإلغاء: /cancel")
+            upload_state = {
+                "type": "monthly_image",
+                "sid": sid,
+                "quiz_type": db.MONTHLY_PREVIOUS,
+                "section": db.SECTION_SHARED,
+            }
+            context.user_data["await"] = upload_state.copy()
+            context.user_data["monthly_image_upload"] = upload_state.copy()
+            return await show(
+                q,
+                "📚 أسئلة شهرية سابقة\n\n"
+                "أرسل الآن صورة الأسئلة.\n\n"
+                "🖼️ أرسلها كصورة من Telegram.\n"
+                "ويمكنك إضافة وصف أو اسم للامتحان في الـ Caption.\n\n"
+                "للإلغاء: /cancel"
+            )
+
         if arg == "current":
             return await show(q, "📝 أسئلة الشهر الحالي\n\nاختر القسم:", monthly_section_markup())
+
         return await show(q, "📝 اختر نوع الأسئلة الشهرية:", monthly_type_markup())
 
     if action == "mis":
         if arg not in ("morning", "evening"):
             return await show(q, "⚠️ القسم غير صالح.", back_markup("ad"))
-        context.user_data["monthly_kind"] = {
+
+        sid = context.user_data.get("monthly_sid")
+        if not sid:
+            return await show(q, "⚠️ انتهت جلسة اختيار المادة. ابدأ من لوحة الأدمن من جديد.", back_markup("ad"))
+
+        section = db.SECTION_MORNING if arg == "morning" else db.SECTION_EVENING
+        upload_state = {
+            "type": "monthly_image",
+            "sid": sid,
             "quiz_type": db.MONTHLY_CURRENT,
-            "section": db.SECTION_MORNING if arg == "morning" else db.SECTION_EVENING,
+            "section": section,
         }
+        context.user_data["await"] = upload_state.copy()
+        context.user_data["monthly_image_upload"] = upload_state.copy()
+
         section_name = "☀️ الصباحي" if arg == "morning" else "🌙 المسائي"
-        return await show(q, f"📝 أسئلة الشهر الحالي — {section_name}\n\nأرسل الآن صورة الأسئلة.\n\n🖼️ أرسلها كصورة من Telegram.\nويمكنك إضافة وصف أو اسم للامتحان في الـ Caption.\n\nللإلغاء: /cancel")
+        return await show(
+            q,
+            f"📝 أسئلة الشهر الحالي — {section_name}\n\n"
+            "أرسل الآن صورة الأسئلة.\n\n"
+            "🖼️ أرسلها كصورة من Telegram.\n"
+            "ويمكنك إضافة وصف أو اسم للامتحان في الـ Caption.\n\n"
+            "للإلغاء: /cancel"
+        )
 
     if action == "ak":
         kind, _, sid_s = arg.partition(":")
