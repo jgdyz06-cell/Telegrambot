@@ -2562,11 +2562,13 @@ async def show_monthly_subject_picker(q, quiz_type, section):
     ])
 
     title = (
-        "☀️ الأسئلة الشهرية الصباحية"
+        "🏁 أسئلة الفاينل"
+        if quiz_type == "final"
+        else "☀️ الأسئلة الشهرية الصباحية"
         if section == db.SECTION_MORNING
         else "🌙 الأسئلة الشهرية المسائية"
         if section == db.SECTION_EVENING
-        else "📚 الأسئلة الشهرية السابقة"
+        else "📚 الأسئلة الشهرية للأعوام السابقة"
     )
 
     if not subjects:
@@ -2599,19 +2601,29 @@ async def send_monthly_images(q, sid, quiz_type, section):
     subject = db.get_subject(sid)
     subject_name = subject["name"] if subject else "المادة"
     title = (
-        "☀️ الأسئلة الشهرية الصباحية"
+        "🏁 أسئلة الفاينل"
+        if quiz_type == "final"
+        else "☀️ الأسئلة الشهرية الصباحية"
         if section == db.SECTION_MORNING
         else "🌙 الأسئلة الشهرية المسائية"
+        if section == db.SECTION_EVENING
+        else "📚 الأسئلة الشهرية للأعوام السابقة"
     )
 
     # إبقاء رسالة الأزرار كما هي، ثم إرسال الصور نفسها من Telegram.
+    back_callback = (
+        "qm_morning" if section == db.SECTION_MORNING
+        else "qm_evening" if section == db.SECTION_EVENING
+        else "qm_previous" if quiz_type == db.MONTHLY_PREVIOUS
+        else "m"
+    )
     await show(
         q,
         f"{title}\n\n📚 {subject_name}\n\n"
         f"📷 عدد الصور: {len(items)}\n\n"
         "الأسئلة معروضة كما رفعها الأدمن.",
         InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 رجوع", callback_data=f"qm_{section}")],
+            [InlineKeyboardButton("🔙 رجوع", callback_data=back_callback)],
             [InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="m")],
         ]),
     )
@@ -2670,7 +2682,7 @@ async def handle_image( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
         quiz_type = monthly_state.get("quiz_type")
         section = monthly_state.get("section", db.SECTION_SHARED)
 
-        if not sid or quiz_type not in (db.MONTHLY_PREVIOUS, db.MONTHLY_CURRENT):
+        if not sid or quiz_type not in (db.MONTHLY_PREVIOUS, db.MONTHLY_CURRENT, "final"):
             context.user_data.pop("monthly_image_upload", None)
             context.user_data.pop("await", None)
             return await message.reply_text("❌ بيانات إضافة الأسئلة الشهرية غير صالحة. ابدأ من لوحة الأدمن من جديد.")
@@ -2696,8 +2708,10 @@ async def handle_image( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
             return await message.reply_text("❌ ما انحفظت الصورة حالياً. تأكد من قاعدة البيانات وحاول مرة ثانية.")
 
         # نخلي حالة الإضافة فعالة حتى يقدر الأدمن يرسل صور متعددة.
-        type_name = "📚 أسئلة شهرية سابقة"
-        if quiz_type == db.MONTHLY_CURRENT and section == db.SECTION_MORNING:
+        type_name = "📚 الأسئلة الشهرية للأعوام السابقة"
+        if quiz_type == "final":
+            type_name = "🏁 أسئلة الفاينل"
+        elif quiz_type == db.MONTHLY_CURRENT and section == db.SECTION_MORNING:
             type_name = "☀️ الأسئلة الشهرية الصباحية"
         elif quiz_type == db.MONTHLY_CURRENT and section == db.SECTION_EVENING:
             type_name = "🌙 الأسئلة الشهرية المسائية"
@@ -5048,10 +5062,14 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
 
     if data == "qm_final":
         await safe_answer(q)
-        return await show(
-            q,
-            "🏁 أسئلة الفاينل\n\n📚 اختر المادة:",
-            subjects_markup("qs", "q_count", "m"),
+        return await show_monthly_subject_picker(
+            q, "final", db.SECTION_SHARED
+        )
+
+    if data == "qm_previous":
+        await safe_answer(q)
+        return await show_monthly_subject_picker(
+            q, db.MONTHLY_PREVIOUS, db.SECTION_SHARED
         )
 
     if data.startswith("mqi:"):
@@ -5064,7 +5082,7 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
             sid = int(parts[3])
         except (TypeError, ValueError):
             return
-        if quiz_type not in (db.MONTHLY_PREVIOUS, db.MONTHLY_CURRENT):
+        if quiz_type not in (db.MONTHLY_PREVIOUS, db.MONTHLY_CURRENT, "final"):
             return
         if section not in (db.SECTION_SHARED, db.SECTION_MORNING, db.SECTION_EVENING):
             return
@@ -5260,6 +5278,30 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
         return await reports.show_contact(
             q
         )
+
+    if data.startswith("mf:"):
+        await safe_answer(q)
+        if not is_admin(q.from_user.id):
+            return
+        return await admin.router(q, context, "mf", data.split(":", 1)[1])
+
+    if data.startswith("mmanage:"):
+        await safe_answer(q)
+        if not is_admin(q.from_user.id):
+            return
+        return await admin.router(q, context, "mmanage", data.split(":", 1)[1])
+
+    if data.startswith("mdeleteone:"):
+        await safe_answer(q)
+        if not is_admin(q.from_user.id):
+            return
+        return await admin.router(q, context, "mdeleteone", data.split(":", 1)[1])
+
+    if data.startswith("mdelete:"):
+        await safe_answer(q)
+        if not is_admin(q.from_user.id):
+            return
+        return await admin.router(q, context, "mdelete", data.split(":", 1)[1])
 
     # ========================================================
     # Admin - Monthly Question Upload
