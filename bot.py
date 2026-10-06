@@ -2536,6 +2536,24 @@ async def handle_image( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
     ):
         return
 
+    # --------------------------------------------------------
+    # Admin monthly questions: save the Telegram photo directly
+    # --------------------------------------------------------
+    aw = context.user_data.get("await")
+
+    if (
+        aw
+        and aw.get("type") == "monthly_image"
+        and is_admin(update.effective_user.id)
+        and photo
+    ):
+        await admin_msg.handle_admin_message(
+            update,
+            context,
+            aw,
+        )
+        return
+
     status = await message.reply_text(
 
         "📷 استلمت الصورة.\n"
@@ -5122,6 +5140,38 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
             context,
             "ap",
             data[3:],
+        )
+
+    if data.startswith("mi:"):
+
+        await safe_answer(q)
+
+        if not is_admin(
+            q.from_user.id
+        ):
+            return
+
+        return await admin.router(
+            q,
+            context,
+            "mi",
+            data[3:],
+        )
+
+    if data.startswith("mis:"):
+
+        await safe_answer(q)
+
+        if not is_admin(
+            q.from_user.id
+        ):
+            return
+
+        return await admin.router(
+            q,
+            context,
+            "mis",
+            data[4:],
         )
 
     if data.startswith("ak:"):
