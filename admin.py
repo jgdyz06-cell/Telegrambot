@@ -4,7 +4,7 @@ from telegram import InlineKeyboardMarkup as Markup
 import db
 from ui import back_markup, show
 
-ACTIONS = {"ad", "ap", "ak", "ay", "ds", "users", "userspage", "mi", "mis"}
+ACTIONS = {"ad", "ap", "ak", "ay", "ds", "users", "userspage", "mi", "mis", "mf", "mfd", "mmanage", "mdelete"}
 
 PICKER_TITLES = {
     "sum": "🔗 اختر المادة لإضافة ملخص:",
@@ -32,6 +32,8 @@ def panel_markup():
         [Btn("🔗 إضافة ملخص", callback_data="ap:sum")],
         [Btn("❓ إضافة أسئلة", callback_data="ap:q")],
         [Btn("🖼️ إضافة أسئلة شهرية", callback_data="ap:mi")],
+        [Btn("🏁 أسئلة الفاينل والأعوام السابقة", callback_data="ap:mf")],
+        [Btn("🗑️ إدارة الأسئلة الشهرية", callback_data="ap:mmanage")],
         [Btn("🗑 حذف ملخص", callback_data="ap:dsum")],
         [Btn("🧹 مسح أسئلة مادة", callback_data="ap:cq")],
         [Btn("🗑 حذف مادة", callback_data="ap:dsub")],
@@ -41,16 +43,29 @@ def panel_markup():
 
 def monthly_type_markup():
     return Markup([
-        [Btn("📚 أسئلة شهرية سابقة", callback_data="mi:previous")],
+        [Btn("📚 الأسئلة الشهرية للأعوام السابقة", callback_data="mi:previous")],
         [Btn("📝 أسئلة الشهر الحالي", callback_data="mi:current")],
         [Btn("🔙 رجوع", callback_data="ad")],
     ])
 
-def monthly_section_markup():
+
+def final_previous_markup():
     return Markup([
-        [Btn("☀️ صباحي", callback_data="mis:morning"), Btn("🌙 مسائي", callback_data="mis:evening")],
-        [Btn("🔙 رجوع", callback_data="ap:mi")],
+        [Btn("🏁 إضافة أسئلة الفاينل", callback_data="mf:final")],
+        [Btn("📚 إضافة الأسئلة الشهرية للأعوام السابقة", callback_data="mf:previous")],
+        [Btn("🔙 رجوع", callback_data="ad")],
     ])
+
+
+def monthly_manage_markup():
+    return Markup([
+        [Btn("☀️ إدارة الأسئلة الشهرية الصباحية", callback_data="mmanage:morning")],
+        [Btn("🌙 إدارة الأسئلة الشهرية المسائية", callback_data="mmanage:evening")],
+        [Btn("📚 إدارة الأسئلة الشهرية للأعوام السابقة", callback_data="mmanage:previous")],
+        [Btn("🏁 إدارة أسئلة الفاينل", callback_data="mmanage:final")],
+        [Btn("🔙 رجوع", callback_data="ad")],
+    ])
+
 
 def confirm_markup(kind, sid):
     return Markup([[
@@ -140,6 +155,8 @@ async def router(q, context, action, arg):
         return await show_users(q, max(0, page))
 
     if action == "ap":
+        if arg == "mmanage":
+            return await show(q, "🗑️ إدارة الأسئلة الشهرية\n\nاختر القسم:", monthly_manage_markup())
         rows = [[Btn(s["name"], callback_data=f"ak:{arg}:{s['id']}")] for s in db.subjects()]
         rows.append([Btn("🔙 رجوع", callback_data="ad")])
         return await show(q, PICKER_TITLES.get(arg, "اختر المادة:"), Markup(rows))
@@ -200,6 +217,102 @@ async def router(q, context, action, arg):
             "للإلغاء: /cancel"
         )
 
+    if action == "mf":
+        sid = context.user_data.get("monthly_sid")
+        if not sid:
+            return await show(q, "⚠️ انتهت جلسة اختيار المادة. ابدأ من لوحة الأدمن من جديد.", back_markup("ad"))
+
+        if arg not in ("final", "previous"):
+            return await show(q, "⚠️ نوع الأسئلة غير صالح.", back_markup("ad"))
+
+        upload_state = {
+            "type": "monthly_image",
+            "sid": sid,
+            "quiz_type": arg,
+            "section": db.SECTION_SHARED,
+        }
+        context.user_data["await"] = upload_state.copy()
+        context.user_data["monthly_image_upload"] = upload_state.copy()
+
+        title = "🏁 أسئلة الفاينل" if arg == "final" else "📚 الأسئلة الشهرية للأعوام السابقة"
+        return await show(
+            q,
+            f"{title} — {db.get_subject(sid)['name']}\n\n"
+            "أرسل الآن صورة الأسئلة.\n\n"
+            "🖼️ أرسلها كصورة من Telegram.\n"
+            "ويمكنك إضافة اسم الامتحان في الـ Caption.\n\n"
+            "للإلغاء: /cancel"
+        )
+
+    if action == "mmanage":
+        if arg == "morning":
+            quiz_type, section, title = db.MONTHLY_CURRENT, db.SECTION_MORNING, "☀️ الأسئلة الشهرية الصباحية"
+        elif arg == "evening":
+            quiz_type, section, title = db.MONTHLY_CURRENT, db.SECTION_EVENING, "🌙 الأسئلة الشهرية المسائية"
+        elif arg == "previous":
+            quiz_type, section, title = db.MONTHLY_PREVIOUS, db.SECTION_SHARED, "📚 الأسئلة الشهرية للأعوام السابقة"
+        elif arg == "final":
+            quiz_type, section, title = "final", db.SECTION_SHARED, "🏁 أسئلة الفاينل"
+        else:
+            return await show(q, "⚠️ القسم غير صالح.", back_markup("ad"))
+
+        context.user_data["monthly_manage"] = {"quiz_type": quiz_type, "section": section}
+        rows = []
+        for subject in db.subjects():
+            sid = int(subject["id"])
+            try:
+                count = db.count_monthly_question_images(sid, quiz_type, section)
+            except Exception:
+                count = 0
+            rows.append([Btn(f"{subject['name']}" + (f" ({count})" if count else ""), callback_data=f"mdelete:{quiz_type}:{section}:{sid}")])
+        rows.append([Btn("🔙 رجوع", callback_data="ap:mmanage")])
+        return await show(q, f"🗑️ {title}\n\nاختر المادة:", Markup(rows))
+
+    if action == "mdelete":
+        parts = arg.split(":")
+        if len(parts) != 3:
+            return await show(q, "⚠️ بيانات الحذف غير صالحة.", back_markup("ad"))
+        quiz_type, section, sid_s = parts
+        try:
+            sid = int(sid_s)
+        except ValueError:
+            return await show(q, "⚠️ رقم المادة غير صالح.", back_markup("ad"))
+        items = db.monthly_question_images(sid, quiz_type, section)
+        if not items:
+            return await show(q, "❌ ماكو صور محفوظة لهذه المادة.", back_markup("ap:mmanage"))
+        rows = []
+        for item in items:
+            image_id = int(item["id"])
+            caption = (item["caption"] or "بدون اسم").strip()
+            rows.append([Btn(f"🗑️ {image_id} — {caption[:45]}", callback_data=f"mdeleteone:{image_id}:{quiz_type}:{section}:{sid}")])
+        rows.append([Btn("🔙 رجوع", callback_data=f"mmanage:{'morning' if section == db.SECTION_MORNING else 'evening' if section == db.SECTION_EVENING else 'previous' if quiz_type == db.MONTHLY_PREVIOUS else 'final'}")])
+        return await show(q, "🗑️ اختر الصورة التي تريد حذفها:", Markup(rows))
+
+    if action == "mdeleteone":
+        parts = arg.split(":")
+        if len(parts) != 4:
+            return await show(q, "⚠️ بيانات الحذف غير صالحة.", back_markup("ad"))
+        image_id, quiz_type, section, sid_s = parts
+        try:
+            image_id = int(image_id); sid = int(sid_s)
+        except ValueError:
+            return await show(q, "⚠️ رقم الصورة أو المادة غير صالح.", back_markup("ad"))
+        try:
+            from dbcore import connect
+            c = connect()
+            try:
+                with c:
+                    cur = c.execute("DELETE FROM monthly_question_images WHERE id = ?", (image_id,))
+                    deleted = cur.rowcount
+            finally:
+                c.close()
+        except Exception:
+            logger.exception("Could not delete monthly question image")
+            return await show(q, "❌ ما قدرت أحذف الصورة حالياً.", back_markup("ad"))
+        if not deleted:
+            return await show(q, "⚠️ الصورة غير موجودة.", back_markup("ad"))
+        return await show(q, "✅ انحذفت الصورة بنجاح.", Markup([[Btn("🗑️ حذف صورة ثانية", callback_data=f"mdelete:{quiz_type}:{section}:{sid}")], [Btn("⚙️ لوحة الأدمن", callback_data="ad")]]))
+
     if action == "ak":
         kind, _, sid_s = arg.partition(":")
         try:
@@ -249,6 +362,10 @@ async def pick_subject(q, context, kind, sid):
     if kind == "mi":
         context.user_data["monthly_sid"] = sid
         return await show(q, f"🖼️ أسئلة شهرية — {name}\n\nاختر نوع الأسئلة:", monthly_type_markup())
+
+    if kind == "mf":
+        context.user_data["monthly_sid"] = sid
+        return await show(q, f"🏁 أسئلة الفاينل والأعوام السابقة — {name}\n\nاختر القسم:", final_previous_markup())
 
     if kind == "dsum":
         items = db.summaries(sid)
