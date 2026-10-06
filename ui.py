@@ -28,15 +28,13 @@ def is_admin(uid):
 
 def back_markup(target, label="🔙 رجوع"):
     return Markup(
-        [
-            [
-                Btn(
-                    label,
-                    callback_data=target,
-                    style="primary",
-                )
-            ]
-        ]
+        [[
+            Btn(
+                label,
+                callback_data=target,
+                style="primary",
+            )
+        ]]
     )
 
 
@@ -46,7 +44,6 @@ async def show(q, text, markup=None):
             text,
             reply_markup=markup
         )
-
     except BadRequest as e:
         if "not modified" not in str(e).lower():
             raise
@@ -57,29 +54,16 @@ async def show(q, text, markup=None):
 # ============================================================
 
 def outfit_markup():
-
     return Markup(
         [
             [
-                Btn(
-                    "🖤 For Him",
-                    callback_data="outfit:him",
-                    style="primary",
-                )
+                Btn("🖤 For Him", callback_data="outfit:him", style="primary")
             ],
             [
-                Btn(
-                    "🤍 For Her",
-                    callback_data="outfit:her",
-                    style="success",
-                )
+                Btn("🤍 For Her", callback_data="outfit:her", style="success")
             ],
             [
-                Btn(
-                    "🔙 رجوع",
-                    callback_data="m",
-                    style="primary",
-                )
+                Btn("🔙 رجوع", callback_data="m", style="primary")
             ],
         ]
     )
@@ -90,40 +74,15 @@ def outfit_markup():
 # ============================================================
 
 def main_menu(uid):
-
     rows = [
-
-        # الملخصات + الاختبارات
         [
-            Btn(
-                "📄 الملخصات",
-                callback_data="sm",
-                style="primary",
-            ),
-
-            Btn(
-                "📝 الاختبارات",
-                callback_data="qm",
-                style="success",
-            ),
+            Btn("📄 الملخصات", callback_data="sm", style="primary"),
+            Btn("📝 الاختبارات", callback_data="qm", style="success"),
         ],
-
-        # النتائج + الجدول
         [
-            Btn(
-                "📊 نتائجي",
-                callback_data="me",
-                style="primary",
-            ),
-
-            Btn(
-                "📅 الجدول الأسبوعي",
-                callback_data="sc",
-                style="primary",
-            ),
+            Btn("📊 نتائجي", callback_data="me", style="primary"),
+            Btn("📅 الجدول الأسبوعي", callback_data="sc", style="primary"),
         ],
-
-        # شرح قواعد اللغة العربية
         [
             Btn(
                 "📚 شرح قواعد اللغة العربية",
@@ -131,8 +90,6 @@ def main_menu(uid):
                 style="primary",
             )
         ],
-
-        # تحدي الذكاء الاصطناعي
         [
             Btn(
                 "🧠 تحدي قواعد اللغة العربية",
@@ -140,23 +97,10 @@ def main_menu(uid):
                 style="success",
             )
         ],
-
-        # الأوتفيت + الطقس
         [
-            Btn(
-                "👕 Outfit",
-                callback_data="outfit",
-                style="primary",
-            ),
-
-            Btn(
-                "🌤️ Weather",
-                callback_data="weather",
-                style="success",
-            ),
+            Btn("👕 Outfit", callback_data="outfit", style="primary"),
+            Btn("🌤️ Weather", callback_data="weather", style="success"),
         ],
-
-        # واجهة قطوف الأكلم
         [
             Btn(
                 "🌐 فتح قطوف الأكلم",
@@ -166,22 +110,10 @@ def main_menu(uid):
                 style="primary",
             )
         ],
-
-        # التقرير + التواصل
         [
-            Btn(
-                "📑 طلب تقرير",
-                callback_data="rp",
-                style="success",
-            ),
-
-            Btn(
-                "📞 تواصل معنا",
-                callback_data="ct",
-                style="primary",
-            ),
+            Btn("📑 طلب تقرير", callback_data="rp", style="success"),
+            Btn("📞 تواصل معنا", callback_data="ct", style="primary"),
         ],
-
     ]
 
     if is_admin(uid):
@@ -203,61 +135,23 @@ def main_menu(uid):
 # ============================================================
 
 def ai_markup():
-
     rows = [
-
         [
-            Btn(
-                "📌 إعراب مفصل",
-                callback_data="ai:grammar",
-                style="primary",
-            ),
-
-            Btn(
-                "🎨 تحليل بلاغي",
-                callback_data="ai:rhetoric",
-                style="success",
-            ),
+            Btn("📌 إعراب مفصل", callback_data="ai:grammar", style="primary"),
+            Btn("🎨 تحليل بلاغي", callback_data="ai:rhetoric", style="success"),
         ],
-
         [
-            Btn(
-                "⚖️ الصرف والبنية",
-                callback_data="ai:morphology",
-                style="primary",
-            ),
-
-            Btn(
-                "📖 معجم المفردات",
-                callback_data="ai:dictionary",
-                style="success",
-            ),
+            Btn("⚖️ الصرف والبنية", callback_data="ai:morphology", style="primary"),
+            Btn("📖 معجم المفردات", callback_data="ai:dictionary", style="success"),
         ],
-
         [
-            Btn(
-                "📝 شرح النص",
-                callback_data="ai:explain",
-                style="primary",
-            ),
-
-            Btn(
-                "🪶 عروض وقافية",
-                callback_data="ai:prosody",
-                style="success",
-            ),
+            Btn("📝 شرح النص", callback_data="ai:explain", style="primary"),
+            Btn("🪶 عروض وقافية", callback_data="ai:prosody", style="success"),
         ],
-
         [
-            Btn(
-                "👤 الشاعر والعصر",
-                callback_data="ai:poet",
-                style="primary",
-            ),
+            Btn("👤 الشاعر والعصر", callback_data="ai:poet", style="primary"),
         ],
-
     ]
-
     return Markup(rows)
 
 
@@ -266,11 +160,9 @@ def ai_markup():
 # ============================================================
 
 def subjects_markup(prefix, count_key=None, back="m"):
-
     buttons = []
 
     for s in db.subjects_with_counts():
-
         label = (
             f"{s['name']} ({s[count_key]})"
             if count_key
@@ -304,13 +196,208 @@ def subjects_markup(prefix, count_key=None, back="m"):
 
 
 # ============================================================
+# الأسئلة الشهرية
+# ============================================================
+
+def monthly_menu_markup():
+    return Markup(
+        [
+            [
+                Btn(
+                    "📚 أسئلة شهرية سابقة",
+                    callback_data="mq:previous",
+                    style="primary",
+                )
+            ],
+            [
+                Btn(
+                    "📝 أسئلة الشهر الحالي",
+                    callback_data="mq:current",
+                    style="success",
+                )
+            ],
+            [
+                Btn(
+                    "🎯 الاختبارات",
+                    callback_data="iqm",
+                    style="primary",
+                )
+            ],
+            [
+                Btn(
+                    "🔙 رجوع",
+                    callback_data="m",
+                    style="primary",
+                )
+            ],
+        ]
+    )
+
+
+def monthly_section_markup():
+    return Markup(
+        [
+            [
+                Btn(
+                    "☀️ صباحي",
+                    callback_data="mqs:current:morning",
+                    style="primary",
+                ),
+                Btn(
+                    "🌙 مسائي",
+                    callback_data="mqs:current:evening",
+                    style="success",
+                ),
+            ],
+            [
+                Btn(
+                    "🔙 رجوع",
+                    callback_data="qm",
+                    style="primary",
+                )
+            ],
+        ]
+    )
+
+
+def monthly_subjects_markup(quiz_type, section):
+    buttons = []
+
+    for s in db.subjects():
+        count = db.count_monthly_question_images(
+            s["id"],
+            quiz_type,
+            section,
+        )
+
+        if count > 0:
+            buttons.append(
+                Btn(
+                    f"{s['name']} ({count})",
+                    callback_data=f"mqi:{quiz_type}:{section}:{s['id']}",
+                    style="primary",
+                )
+            )
+
+    rows = [
+        buttons[i:i + 2]
+        for i in range(0, len(buttons), 2)
+    ]
+
+    rows.append(
+        [
+            Btn(
+                "🔙 رجوع",
+                callback_data="qm",
+                style="primary",
+            )
+        ]
+    )
+
+    return Markup(rows)
+
+
+async def show_monthly_subjects(q, quiz_type, section):
+    if quiz_type == db.MONTHLY_PREVIOUS:
+        title = "📚 أسئلة شهرية سابقة\n\nاختر المادة:"
+    elif section == db.SECTION_MORNING:
+        title = "📝 أسئلة الشهر الحالي — ☀️ صباحي\n\nاختر المادة:"
+    else:
+        title = "📝 أسئلة الشهر الحالي — 🌙 مسائي\n\nاختر المادة:"
+
+    has_subjects = any(
+        db.count_monthly_question_images(
+            s["id"],
+            quiz_type,
+            section,
+        ) > 0
+        for s in db.subjects()
+    )
+
+    if not has_subjects:
+        return await show(
+            q,
+            title + "\n\n⚠️ لا توجد أسئلة مضافة حالياً.",
+            back_markup("qm"),
+        )
+
+    return await show(
+        q,
+        title,
+        monthly_subjects_markup(
+            quiz_type,
+            section,
+        ),
+    )
+
+
+async def show_monthly_images(q, sid, quiz_type, section):
+    subj = db.get_subject(sid)
+
+    if not subj:
+        return await show(
+            q,
+            "⚠️ المادة غير موجودة.",
+            back_markup("qm"),
+        )
+
+    images = db.monthly_question_images(
+        sid,
+        quiz_type,
+        section,
+    )
+
+    if not images:
+        return await show(
+            q,
+            "⚠️ لا توجد أسئلة مضافة لهذا القسم.",
+            back_markup("qm"),
+        )
+
+    for image in images:
+        caption = image["caption"] or "📝 أسئلة شهرية"
+        await q.message.reply_photo(
+            image["file_id"],
+            caption=caption,
+        )
+
+    if quiz_type == db.MONTHLY_PREVIOUS:
+        title = f"📚 الأسئلة الشهرية السابقة — {subj['name']}"
+    elif section == db.SECTION_MORNING:
+        title = f"☀️ أسئلة الشهر الحالي الصباحية — {subj['name']}"
+    else:
+        title = f"🌙 أسئلة الشهر الحالي المسائية — {subj['name']}"
+
+    return await show(
+        q,
+        title,
+        Markup(
+            [
+                [
+                    Btn(
+                        "🔙 رجوع للمواد",
+                        callback_data=f"mqs:{quiz_type}:{section}",
+                        style="primary",
+                    )
+                ],
+                [
+                    Btn(
+                        "📝 قائمة الاختبارات",
+                        callback_data="qm",
+                        style="success",
+                    )
+                ],
+            ]
+        ),
+    )
+
+
+# ============================================================
 # التواصل
 # ============================================================
 
 def contact_buttons():
-
     return [
-
         [
             Btn(
                 "✈️ تلقرام",
@@ -318,7 +405,6 @@ def contact_buttons():
                 style="primary",
             )
         ],
-
         [
             Btn(
                 "🟢 واتساب",
@@ -326,7 +412,6 @@ def contact_buttons():
                 style="success",
             )
         ],
-
     ]
 
 
@@ -335,11 +420,9 @@ def contact_buttons():
 # ============================================================
 
 async def summaries_list(q, sid):
-
     subj = db.get_subject(sid)
 
     if not subj:
-
         return await show(
             q,
             "⚠️ المادة غير موجودة.",
@@ -349,7 +432,6 @@ async def summaries_list(q, sid):
     items = db.summaries(sid)
 
     if not items:
-
         return await show(
             q,
             f"⚠️ ما في ملخصات مضافة بعد لمادة {subj['name']}.",
@@ -389,24 +471,17 @@ async def summaries_list(q, sid):
 # ============================================================
 
 async def send_summary(q, sum_id):
-
     it = db.get_summary(sum_id)
 
     if not it:
-
-        return await q.message.reply_text(
-            "⚠️ هذا الملخص انحذف."
-        )
+        return await q.message.reply_text("⚠️ هذا الملخص انحذف.")
 
     if it["file_id"]:
-
         await q.message.reply_document(
             it["file_id"],
             caption=f"📄 {it['title']}"
         )
-
     else:
-
         await q.message.reply_text(
             f"📄 {it['title']}\n{it['url']}"
         )
@@ -424,10 +499,8 @@ SUB_TEXT = (
 
 
 def sub_markup():
-
     return Markup(
         [
-
             [
                 Btn(
                     "📢 اشترك بالقناة",
@@ -435,7 +508,6 @@ def sub_markup():
                     style="primary",
                 )
             ],
-
             [
                 Btn(
                     "✅ اشتركت، تحقق",
@@ -443,7 +515,6 @@ def sub_markup():
                     style="success",
                 )
             ],
-
         ]
     )
 
@@ -452,12 +523,7 @@ def sub_markup():
 # التحقق من الاشتراك
 # ============================================================
 
-async def is_subscribed(
-    context,
-    uid,
-    force=False
-):
-
+async def is_subscribed(context, uid, force=False):
     if not CHANNEL or is_admin(uid):
         return True
 
@@ -473,20 +539,16 @@ async def is_subscribed(
         return True
 
     try:
-
         m = await context.bot.get_chat_member(
             CHANNEL,
             uid
         )
-
     except Exception:
-
         logger.exception(
             "ما قدرت أتحقق من الاشتراك. "
             "تأكد إن البوت أدمن بالقناة %s",
             CHANNEL
         )
-
         return True
 
     ok = (
@@ -506,9 +568,6 @@ async def is_subscribed(
     )
 
     if ok:
-
-        context.user_data["sub_until"] = (
-            now + 600
-        )
+        context.user_data["sub_until"] = now + 600
 
     return ok
