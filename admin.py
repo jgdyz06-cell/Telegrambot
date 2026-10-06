@@ -52,6 +52,14 @@ def monthly_type_markup():
     ])
 
 
+def monthly_section_markup():
+    return Markup([
+        [Btn("☀️ دراسة صباحية", callback_data="mis:morning", style=cb_style(20))],
+        [Btn("🌙 دراسة مسائية", callback_data="mis:evening", style=cb_style(21))],
+        [Btn("🔙 رجوع", callback_data="ad", style=cb_style(22))],
+    ])
+
+
 def monthly_manage_markup():
     return Markup([
         [Btn("☀️ إدارة الأسئلة الشهرية الصباحية", callback_data="mmanage:morning", style=cb_style(13))],
