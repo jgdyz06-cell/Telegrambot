@@ -2551,6 +2551,7 @@ async def show_monthly_subject_picker(q, quiz_type, section):
             InlineKeyboardButton(
                 label,
                 callback_data=f"mqi:{quiz_type}:{section}:{sid}",
+                style=("primary", "success", "danger")[len(rows) % 3],
             )
         ])
 
@@ -2558,13 +2559,12 @@ async def show_monthly_subject_picker(q, quiz_type, section):
         InlineKeyboardButton(
             "🔙 القائمة الرئيسية",
             callback_data="m",
+            style="primary",
         )
     ])
 
     title = (
-        "🏁 أسئلة الفاينل"
-        if quiz_type == "final"
-        else "☀️ الأسئلة الشهرية الصباحية"
+        "☀️ الأسئلة الشهرية الصباحية"
         if section == db.SECTION_MORNING
         else "🌙 الأسئلة الشهرية المسائية"
         if section == db.SECTION_EVENING
@@ -2588,22 +2588,20 @@ async def send_monthly_images(q, sid, quiz_type, section):
         return await show(
             q,
             "❌ تعذر تحميل الأسئلة الشهرية حالياً.",
-            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع", callback_data="m")]]),
+            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع", callback_data="m", style="primary")]]),
         )
 
     if not items:
         return await show(
             q,
             "❌ ماكو أسئلة مضافة لهذه المادة حالياً.",
-            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع", callback_data=f"qm_{section}")]]),
+            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع", callback_data=f"qm_{section}", style="danger")]]),
         )
 
     subject = db.get_subject(sid)
     subject_name = subject["name"] if subject else "المادة"
     title = (
-        "🏁 أسئلة الفاينل"
-        if quiz_type == "final"
-        else "☀️ الأسئلة الشهرية الصباحية"
+        "☀️ الأسئلة الشهرية الصباحية"
         if section == db.SECTION_MORNING
         else "🌙 الأسئلة الشهرية المسائية"
         if section == db.SECTION_EVENING
@@ -2623,8 +2621,8 @@ async def send_monthly_images(q, sid, quiz_type, section):
         f"📷 عدد الصور: {len(items)}\n\n"
         "الأسئلة معروضة كما رفعها الأدمن.",
         InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 رجوع", callback_data=back_callback)],
-            [InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="m")],
+            [InlineKeyboardButton("🔙 رجوع", callback_data=back_callback, style="success")],
+            [InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="m", style="primary")],
         ]),
     )
 
@@ -2682,7 +2680,7 @@ async def handle_image( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
         quiz_type = monthly_state.get("quiz_type")
         section = monthly_state.get("section", db.SECTION_SHARED)
 
-        if not sid or quiz_type not in (db.MONTHLY_PREVIOUS, db.MONTHLY_CURRENT, "final"):
+        if not sid or quiz_type not in (db.MONTHLY_PREVIOUS, db.MONTHLY_CURRENT):
             context.user_data.pop("monthly_image_upload", None)
             context.user_data.pop("await", None)
             return await message.reply_text("❌ بيانات إضافة الأسئلة الشهرية غير صالحة. ابدأ من لوحة الأدمن من جديد.")
@@ -2709,9 +2707,7 @@ async def handle_image( update: Update, context: ContextTypes.DEFAULT_TYPE, ):
 
         # نخلي حالة الإضافة فعالة حتى يقدر الأدمن يرسل صور متعددة.
         type_name = "📚 الأسئلة الشهرية للأعوام السابقة"
-        if quiz_type == "final":
-            type_name = "🏁 أسئلة الفاينل"
-        elif quiz_type == db.MONTHLY_CURRENT and section == db.SECTION_MORNING:
+        if quiz_type == db.MONTHLY_CURRENT and section == db.SECTION_MORNING:
             type_name = "☀️ الأسئلة الشهرية الصباحية"
         elif quiz_type == db.MONTHLY_CURRENT and section == db.SECTION_EVENING:
             type_name = "🌙 الأسئلة الشهرية المسائية"
@@ -5060,12 +5056,6 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
             q, db.MONTHLY_CURRENT, db.SECTION_EVENING
         )
 
-    if data == "qm_final":
-        await safe_answer(q)
-        return await show_monthly_subject_picker(
-            q, "final", db.SECTION_SHARED
-        )
-
     if data == "qm_previous":
         await safe_answer(q)
         return await show_monthly_subject_picker(
@@ -5082,7 +5072,7 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
             sid = int(parts[3])
         except (TypeError, ValueError):
             return
-        if quiz_type not in (db.MONTHLY_PREVIOUS, db.MONTHLY_CURRENT, "final"):
+        if quiz_type not in (db.MONTHLY_PREVIOUS, db.MONTHLY_CURRENT):
             return
         if section not in (db.SECTION_SHARED, db.SECTION_MORNING, db.SECTION_EVENING):
             return
@@ -5278,12 +5268,6 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
         return await reports.show_contact(
             q
         )
-
-    if data.startswith("mf:"):
-        await safe_answer(q)
-        if not is_admin(q.from_user.id):
-            return
-        return await admin.router(q, context, "mf", data.split(":", 1)[1])
 
     if data.startswith("mmanage:"):
         await safe_answer(q)
