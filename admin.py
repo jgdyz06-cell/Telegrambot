@@ -4,7 +4,11 @@ from telegram import InlineKeyboardMarkup as Markup
 import db
 from ui import back_markup, show
 
-ACTIONS = {"ad", "ap", "ak", "ay", "ds", "users", "userspage", "mi", "mis", "mf", "mfd", "mmanage", "mdelete"}
+
+def cb_style(i):
+    return ("primary", "success", "danger")[i % 3]
+
+ACTIONS = {"ad", "ap", "ak", "ay", "ds", "users", "userspage", "mi", "mis", "mmanage", "mdelete"}
 
 PICKER_TITLES = {
     "sum": "🔗 اختر المادة لإضافة ملخص:",
@@ -28,49 +32,39 @@ QUESTIONS_HELP = (
 
 def panel_markup():
     return Markup([
-        [Btn("➕ مادة جديدة", callback_data="ad:newsubj")],
-        [Btn("🔗 إضافة ملخص", callback_data="ap:sum")],
-        [Btn("❓ إضافة أسئلة", callback_data="ap:q")],
-        [Btn("🖼️ إضافة أسئلة شهرية", callback_data="ap:mi")],
-        [Btn("🏁 أسئلة الفاينل والأعوام السابقة", callback_data="ap:mf")],
-        [Btn("🗑️ إدارة الأسئلة الشهرية", callback_data="ap:mmanage")],
-        [Btn("🗑 حذف ملخص", callback_data="ap:dsum")],
-        [Btn("🧹 مسح أسئلة مادة", callback_data="ap:cq")],
-        [Btn("🗑 حذف مادة", callback_data="ap:dsub")],
-        [Btn("👥 المستخدمون", callback_data="users")],
-        [Btn("🔙 القائمة الرئيسية", callback_data="m")],
+        [Btn("➕ مادة جديدة", callback_data="ad:newsubj", style=cb_style(0))],
+        [Btn("🔗 إضافة ملخص", callback_data="ap:sum", style=cb_style(1))],
+        [Btn("❓ إضافة أسئلة", callback_data="ap:q", style=cb_style(2))],
+        [Btn("🖼️ إضافة أسئلة شهرية", callback_data="ap:mi", style=cb_style(3))],
+        [Btn("🗑️ إدارة الأسئلة الشهرية", callback_data="ap:mmanage", style=cb_style(4))],
+        [Btn("🗑 حذف ملخص", callback_data="ap:dsum", style=cb_style(5))],
+        [Btn("🧹 مسح أسئلة مادة", callback_data="ap:cq", style=cb_style(6))],
+        [Btn("🗑 حذف مادة", callback_data="ap:dsub", style=cb_style(7))],
+        [Btn("👥 المستخدمون", callback_data="users", style=cb_style(8))],
+        [Btn("🔙 القائمة الرئيسية", callback_data="m", style=cb_style(9))],
     ])
 
 def monthly_type_markup():
     return Markup([
-        [Btn("📚 الأسئلة الشهرية للأعوام السابقة", callback_data="mi:previous")],
-        [Btn("📝 أسئلة الشهر الحالي", callback_data="mi:current")],
-        [Btn("🔙 رجوع", callback_data="ad")],
-    ])
-
-
-def final_previous_markup():
-    return Markup([
-        [Btn("🏁 إضافة أسئلة الفاينل", callback_data="mf:final")],
-        [Btn("📚 إضافة الأسئلة الشهرية للأعوام السابقة", callback_data="mf:previous")],
-        [Btn("🔙 رجوع", callback_data="ad")],
+        [Btn("📚 الأسئلة الشهرية للأعوام السابقة", callback_data="mi:previous", style=cb_style(10))],
+        [Btn("📝 أسئلة الشهر الحالي", callback_data="mi:current", style=cb_style(11))],
+        [Btn("🔙 رجوع", callback_data="ad", style=cb_style(12))],
     ])
 
 
 def monthly_manage_markup():
     return Markup([
-        [Btn("☀️ إدارة الأسئلة الشهرية الصباحية", callback_data="mmanage:morning")],
-        [Btn("🌙 إدارة الأسئلة الشهرية المسائية", callback_data="mmanage:evening")],
-        [Btn("📚 إدارة الأسئلة الشهرية للأعوام السابقة", callback_data="mmanage:previous")],
-        [Btn("🏁 إدارة أسئلة الفاينل", callback_data="mmanage:final")],
-        [Btn("🔙 رجوع", callback_data="ad")],
+        [Btn("☀️ إدارة الأسئلة الشهرية الصباحية", callback_data="mmanage:morning", style=cb_style(13))],
+        [Btn("🌙 إدارة الأسئلة الشهرية المسائية", callback_data="mmanage:evening", style=cb_style(14))],
+        [Btn("📚 إدارة الأسئلة الشهرية للأعوام السابقة", callback_data="mmanage:previous", style=cb_style(15))],
+        [Btn("🔙 رجوع", callback_data="ad", style=cb_style(16))],
     ])
 
 
 def confirm_markup(kind, sid):
     return Markup([[
-        Btn("✅ نعم", callback_data=f"ay:{kind}:{sid}"),
-        Btn("❌ لا", callback_data="ad"),
+        Btn("✅ نعم", callback_data=f"ay:{kind}:{sid}", style=cb_style(17)),
+        Btn("❌ لا", callback_data="ad", style=cb_style(18)),
     ]])
 
 USERS_PER_PAGE = 8
@@ -78,20 +72,20 @@ USERS_PER_PAGE = 8
 def users_markup(page=0):
     total = db.get_users_count()
     if total <= 0:
-        return Markup([[Btn("🔄 تحديث", callback_data="users")], [Btn("🔙 لوحة الأدمن", callback_data="ad")]])
+        return Markup([[Btn("🔄 تحديث", callback_data="users", style=cb_style(19))], [Btn("🔙 لوحة الأدمن", callback_data="ad", style=cb_style(20))]])
     pages = (total + USERS_PER_PAGE - 1) // USERS_PER_PAGE
     if page >= pages:
         page = pages - 1
     rows = []
     navigation = []
     if page > 0:
-        navigation.append(Btn("⬅️ السابق", callback_data=f"userspage:{page - 1}"))
+        navigation.append(Btn("⬅️ السابق", callback_data=f"userspage:{page - 1}", style=cb_style(21)))
     if page < pages - 1:
-        navigation.append(Btn("التالي ➡️", callback_data=f"userspage:{page + 1}"))
+        navigation.append(Btn("التالي ➡️", callback_data=f"userspage:{page + 1}", style=cb_style(22)))
     if navigation:
         rows.append(navigation)
-    rows.append([Btn("🔄 تحديث", callback_data=f"userspage:{page}")])
-    rows.append([Btn("🔙 لوحة الأدمن", callback_data="ad")])
+    rows.append([Btn("🔄 تحديث", callback_data=f"userspage:{page}", style=cb_style(23))])
+    rows.append([Btn("🔙 لوحة الأدمن", callback_data="ad", style=cb_style(24))])
     return Markup(rows)
 
 def format_user(user):
@@ -122,17 +116,17 @@ async def show_users(q, page=0):
         number = index + page * USERS_PER_PAGE
         lines.append(f"{number}. {format_user(user)}")
         lines.append("━━━━━━━━━━━━━━")
-        user_buttons.append([Btn(f"👤 فتح حساب المستخدم {number}", url=f"tg://user?id={user['user_id']}")])
+        user_buttons.append([Btn(f"👤 فتح حساب المستخدم {number}", url=f"tg://user?id={user['user_id']}", style=cb_style(25))])
     keyboard = user_buttons
     navigation = []
     if page > 0:
-        navigation.append(Btn("⬅️ السابق", callback_data=f"userspage:{page - 1}"))
+        navigation.append(Btn("⬅️ السابق", callback_data=f"userspage:{page - 1}", style=cb_style(26)))
     if page < pages - 1:
-        navigation.append(Btn("التالي ➡️", callback_data=f"userspage:{page + 1}"))
+        navigation.append(Btn("التالي ➡️", callback_data=f"userspage:{page + 1}", style=cb_style(27)))
     if navigation:
         keyboard.append(navigation)
-    keyboard.append([Btn("🔄 تحديث", callback_data=f"userspage:{page}")])
-    keyboard.append([Btn("🔙 لوحة الأدمن", callback_data="ad")])
+    keyboard.append([Btn("🔄 تحديث", callback_data=f"userspage:{page}", style=cb_style(28))])
+    keyboard.append([Btn("🔙 لوحة الأدمن", callback_data="ad", style=cb_style(29))])
     return await show(q, "\n".join(lines).strip(), Markup(keyboard))
 
 async def router(q, context, action, arg):
@@ -157,8 +151,8 @@ async def router(q, context, action, arg):
     if action == "ap":
         if arg == "mmanage":
             return await show(q, "🗑️ إدارة الأسئلة الشهرية\n\nاختر القسم:", monthly_manage_markup())
-        rows = [[Btn(s["name"], callback_data=f"ak:{arg}:{s['id']}")] for s in db.subjects()]
-        rows.append([Btn("🔙 رجوع", callback_data="ad")])
+        rows = [[Btn(s["name"], callback_data=f"ak:{arg}:{s['id']}", style=cb_style(30))] for s in db.subjects()]
+        rows.append([Btn("🔙 رجوع", callback_data="ad", style=cb_style(31))])
         return await show(q, PICKER_TITLES.get(arg, "اختر المادة:"), Markup(rows))
 
     if action == "mi":
@@ -217,33 +211,6 @@ async def router(q, context, action, arg):
             "للإلغاء: /cancel"
         )
 
-    if action == "mf":
-        sid = context.user_data.get("monthly_sid")
-        if not sid:
-            return await show(q, "⚠️ انتهت جلسة اختيار المادة. ابدأ من لوحة الأدمن من جديد.", back_markup("ad"))
-
-        if arg not in ("final", "previous"):
-            return await show(q, "⚠️ نوع الأسئلة غير صالح.", back_markup("ad"))
-
-        upload_state = {
-            "type": "monthly_image",
-            "sid": sid,
-            "quiz_type": arg,
-            "section": db.SECTION_SHARED,
-        }
-        context.user_data["await"] = upload_state.copy()
-        context.user_data["monthly_image_upload"] = upload_state.copy()
-
-        title = "🏁 أسئلة الفاينل" if arg == "final" else "📚 الأسئلة الشهرية للأعوام السابقة"
-        return await show(
-            q,
-            f"{title} — {db.get_subject(sid)['name']}\n\n"
-            "أرسل الآن صورة الأسئلة.\n\n"
-            "🖼️ أرسلها كصورة من Telegram.\n"
-            "ويمكنك إضافة اسم الامتحان في الـ Caption.\n\n"
-            "للإلغاء: /cancel"
-        )
-
     if action == "mmanage":
         if arg == "morning":
             quiz_type, section, title = db.MONTHLY_CURRENT, db.SECTION_MORNING, "☀️ الأسئلة الشهرية الصباحية"
@@ -251,8 +218,6 @@ async def router(q, context, action, arg):
             quiz_type, section, title = db.MONTHLY_CURRENT, db.SECTION_EVENING, "🌙 الأسئلة الشهرية المسائية"
         elif arg == "previous":
             quiz_type, section, title = db.MONTHLY_PREVIOUS, db.SECTION_SHARED, "📚 الأسئلة الشهرية للأعوام السابقة"
-        elif arg == "final":
-            quiz_type, section, title = "final", db.SECTION_SHARED, "🏁 أسئلة الفاينل"
         else:
             return await show(q, "⚠️ القسم غير صالح.", back_markup("ad"))
 
@@ -265,7 +230,7 @@ async def router(q, context, action, arg):
             except Exception:
                 count = 0
             rows.append([Btn(f"{subject['name']}" + (f" ({count})" if count else ""), callback_data=f"mdelete:{quiz_type}:{section}:{sid}")])
-        rows.append([Btn("🔙 رجوع", callback_data="ap:mmanage")])
+        rows.append([Btn("🔙 رجوع", callback_data="ap:mmanage", style=cb_style(32))])
         return await show(q, f"🗑️ {title}\n\nاختر المادة:", Markup(rows))
 
     if action == "mdelete":
@@ -284,8 +249,8 @@ async def router(q, context, action, arg):
         for item in items:
             image_id = int(item["id"])
             caption = (item["caption"] or "بدون اسم").strip()
-            rows.append([Btn(f"🗑️ {image_id} — {caption[:45]}", callback_data=f"mdeleteone:{image_id}:{quiz_type}:{section}:{sid}")])
-        rows.append([Btn("🔙 رجوع", callback_data=f"mmanage:{'morning' if section == db.SECTION_MORNING else 'evening' if section == db.SECTION_EVENING else 'previous' if quiz_type == db.MONTHLY_PREVIOUS else 'final'}")])
+            rows.append([Btn(f"🗑️ {image_id} — {caption[:45]}", callback_data=f"mdeleteone:{image_id}:{quiz_type}:{section}:{sid}", style=cb_style(33))])
+        rows.append([Btn("🔙 رجوع", callback_data=f"mmanage:{'morning' if section == db.SECTION_MORNING else 'evening' if section == db.SECTION_EVENING else 'previous' if quiz_type == db.MONTHLY_PREVIOUS else 'final'}", style=cb_style(34))])
         return await show(q, "🗑️ اختر الصورة التي تريد حذفها:", Markup(rows))
 
     if action == "mdeleteone":
@@ -311,7 +276,7 @@ async def router(q, context, action, arg):
             return await show(q, "❌ ما قدرت أحذف الصورة حالياً.", back_markup("ad"))
         if not deleted:
             return await show(q, "⚠️ الصورة غير موجودة.", back_markup("ad"))
-        return await show(q, "✅ انحذفت الصورة بنجاح.", Markup([[Btn("🗑️ حذف صورة ثانية", callback_data=f"mdelete:{quiz_type}:{section}:{sid}")], [Btn("⚙️ لوحة الأدمن", callback_data="ad")]]))
+        return await show(q, "✅ انحذفت الصورة بنجاح.", Markup([[Btn("🗑️ حذف صورة ثانية", callback_data=f"mdelete:{quiz_type}:{section}:{sid}", style=cb_style(35))], [Btn("⚙️ لوحة الأدمن", callback_data="ad", style=cb_style(36))]]))
 
     if action == "ak":
         kind, _, sid_s = arg.partition(":")
@@ -363,16 +328,12 @@ async def pick_subject(q, context, kind, sid):
         context.user_data["monthly_sid"] = sid
         return await show(q, f"🖼️ أسئلة شهرية — {name}\n\nاختر نوع الأسئلة:", monthly_type_markup())
 
-    if kind == "mf":
-        context.user_data["monthly_sid"] = sid
-        return await show(q, f"🏁 أسئلة الفاينل والأعوام السابقة — {name}\n\nاختر القسم:", final_previous_markup())
-
     if kind == "dsum":
         items = db.summaries(sid)
         if not items:
             return await show(q, "ما في ملخصات لهذي المادة.", back_markup("ad"))
-        rows = [[Btn(f"🗑 {it['title']}", callback_data=f"ds:{it['id']}")] for it in items]
-        rows.append([Btn("🔙 رجوع", callback_data="ad")])
+        rows = [[Btn(f"🗑 {it['title']}", callback_data=f"ds:{it['id']}", style=cb_style(37))] for it in items]
+        rows.append([Btn("🔙 رجوع", callback_data="ad", style=cb_style(38))])
         return await show(q, "اضغط على الملخص اللي تبي تحذفه:", Markup(rows))
 
     if kind == "cq":
