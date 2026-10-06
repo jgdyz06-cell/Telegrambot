@@ -22,6 +22,11 @@ from config import (
 )
 
 
+# القناة الإلزامية
+CHANNEL = "@AMMAR_KHAL_I_D"
+CHANNEL_URL = "https://t.me/AMMAR_KHAL_I_D"
+
+
 def is_admin(uid):
     return uid in ADMIN_IDS
 
@@ -320,7 +325,7 @@ async def is_subscribed(context, uid, force=False):
             "تأكد إن البوت أدمن بالقناة %s",
             CHANNEL
         )
-        return True
+        return False
 
     ok = (
         m.status in ("member", "administrator", "creator")
