@@ -26,6 +26,11 @@ def is_admin(uid):
     return uid in ADMIN_IDS
 
 
+# ألوان الأزرار بالتناوب حتى لا تكون القوائم كلها بلون واحد.
+def colored_style(index):
+    return ("primary", "success", "danger")[index % 3]
+
+
 def back_markup(target, label="🔙 رجوع"):
     return Markup(
         [[Btn(label, callback_data=target, style="primary")]]
@@ -78,15 +83,6 @@ def main_menu(uid):
                 "🌙 الأسئلة الشهرية المسائية",
                 callback_data="qm_evening",
                 style="success",
-            ),
-        ],
-
-        # أسئلة الفاينل
-        [
-            Btn(
-                "🏁 أسئلة الفاينل",
-                callback_data="qm_final",
-                style="danger",
             ),
         ],
 
@@ -192,7 +188,7 @@ def subjects_markup(prefix, count_key=None, back="m"):
             Btn(
                 label,
                 callback_data=f"{prefix}:{s['id']}",
-                style="primary",
+                style=colored_style(len(buttons)),
             )
         )
 
