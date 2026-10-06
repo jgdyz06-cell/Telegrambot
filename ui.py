@@ -28,22 +28,13 @@ def is_admin(uid):
 
 def back_markup(target, label="🔙 رجوع"):
     return Markup(
-        [[
-            Btn(
-                label,
-                callback_data=target,
-                style="primary",
-            )
-        ]]
+        [[Btn(label, callback_data=target, style="primary")]]
     )
 
 
 async def show(q, text, markup=None):
     try:
-        await q.edit_message_text(
-            text,
-            reply_markup=markup
-        )
+        await q.edit_message_text(text, reply_markup=markup)
     except BadRequest as e:
         if "not modified" not in str(e).lower():
             raise
@@ -56,15 +47,9 @@ async def show(q, text, markup=None):
 def outfit_markup():
     return Markup(
         [
-            [
-                Btn("🖤 For Him", callback_data="outfit:him", style="primary")
-            ],
-            [
-                Btn("🤍 For Her", callback_data="outfit:her", style="success")
-            ],
-            [
-                Btn("🔙 رجوع", callback_data="m", style="primary")
-            ],
+            [Btn("🖤 For Him", callback_data="outfit:him", style="primary")],
+            [Btn("🤍 For Her", callback_data="outfit:her", style="success")],
+            [Btn("🔙 رجوع", callback_data="m", style="primary")],
         ]
     )
 
@@ -74,15 +59,42 @@ def outfit_markup():
 # ============================================================
 
 def main_menu(uid):
+
     rows = [
+
         [
             Btn("📄 الملخصات", callback_data="sm", style="primary"),
             Btn("📝 الاختبارات", callback_data="qm", style="success"),
         ],
+
+        # الأسئلة الخاصة بالأقسام
+        [
+            Btn(
+                "☀️ الأسئلة الصباحية",
+                callback_data="qm_morning",
+                style="primary",
+            ),
+            Btn(
+                "🌙 الأسئلة المسائية",
+                callback_data="qm_evening",
+                style="success",
+            ),
+        ],
+
+        # أسئلة الفاينل
+        [
+            Btn(
+                "🏁 أسئلة الفاينل",
+                callback_data="qm_final",
+                style="danger",
+            ),
+        ],
+
         [
             Btn("📊 نتائجي", callback_data="me", style="primary"),
             Btn("📅 الجدول الأسبوعي", callback_data="sc", style="primary"),
         ],
+
         [
             Btn(
                 "📚 شرح قواعد اللغة العربية",
@@ -90,6 +102,7 @@ def main_menu(uid):
                 style="primary",
             )
         ],
+
         [
             Btn(
                 "🧠 تحدي قواعد اللغة العربية",
@@ -97,10 +110,12 @@ def main_menu(uid):
                 style="success",
             )
         ],
+
         [
             Btn("👕 Outfit", callback_data="outfit", style="primary"),
             Btn("🌤️ Weather", callback_data="weather", style="success"),
         ],
+
         [
             Btn(
                 "🌐 فتح قطوف الأكلم",
@@ -110,6 +125,7 @@ def main_menu(uid):
                 style="primary",
             )
         ],
+
         [
             Btn("📑 طلب تقرير", callback_data="rp", style="success"),
             Btn("📞 تواصل معنا", callback_data="ct", style="primary"),
@@ -118,13 +134,7 @@ def main_menu(uid):
 
     if is_admin(uid):
         rows.append(
-            [
-                Btn(
-                    "⚙️ لوحة الأدمن",
-                    callback_data="ad",
-                    style="danger",
-                )
-            ]
+            [Btn("⚙️ لوحة الأدمن", callback_data="ad", style="danger")]
         )
 
     return Markup(rows)
@@ -135,24 +145,25 @@ def main_menu(uid):
 # ============================================================
 
 def ai_markup():
-    rows = [
+    return Markup(
         [
-            Btn("📌 إعراب مفصل", callback_data="ai:grammar", style="primary"),
-            Btn("🎨 تحليل بلاغي", callback_data="ai:rhetoric", style="success"),
-        ],
-        [
-            Btn("⚖️ الصرف والبنية", callback_data="ai:morphology", style="primary"),
-            Btn("📖 معجم المفردات", callback_data="ai:dictionary", style="success"),
-        ],
-        [
-            Btn("📝 شرح النص", callback_data="ai:explain", style="primary"),
-            Btn("🪶 عروض وقافية", callback_data="ai:prosody", style="success"),
-        ],
-        [
-            Btn("👤 الشاعر والعصر", callback_data="ai:poet", style="primary"),
-        ],
-    ]
-    return Markup(rows)
+            [
+                Btn("📌 إعراب مفصل", callback_data="ai:grammar", style="primary"),
+                Btn("🎨 تحليل بلاغي", callback_data="ai:rhetoric", style="success"),
+            ],
+            [
+                Btn("⚖️ الصرف والبنية", callback_data="ai:morphology", style="primary"),
+                Btn("📖 معجم المفردات", callback_data="ai:dictionary", style="success"),
+            ],
+            [
+                Btn("📝 شرح النص", callback_data="ai:explain", style="primary"),
+                Btn("🪶 عروض وقافية", callback_data="ai:prosody", style="success"),
+            ],
+            [
+                Btn("👤 الشاعر والعصر", callback_data="ai:poet", style="primary"),
+            ],
+        ]
+    )
 
 
 # ============================================================
@@ -160,6 +171,7 @@ def ai_markup():
 # ============================================================
 
 def subjects_markup(prefix, count_key=None, back="m"):
+
     buttons = []
 
     for s in db.subjects_with_counts():
@@ -168,7 +180,6 @@ def subjects_markup(prefix, count_key=None, back="m"):
             if count_key
             else s["name"]
         )
-
         buttons.append(
             Btn(
                 label,
@@ -183,213 +194,10 @@ def subjects_markup(prefix, count_key=None, back="m"):
     ]
 
     rows.append(
-        [
-            Btn(
-                "🔙 رجوع",
-                callback_data=back,
-                style="primary",
-            )
-        ]
+        [Btn("🔙 رجوع", callback_data=back, style="primary")]
     )
 
     return Markup(rows)
-
-
-# ============================================================
-# الأسئلة الشهرية
-# ============================================================
-
-def monthly_menu_markup():
-    return Markup(
-        [
-            [
-                Btn(
-                    "📚 أسئلة شهرية سابقة",
-                    callback_data="mq:previous",
-                    style="primary",
-                )
-            ],
-            [
-                Btn(
-                    "📝 أسئلة الشهر الحالي",
-                    callback_data="mq:current",
-                    style="success",
-                )
-            ],
-            [
-                Btn(
-                    "🎯 الاختبارات",
-                    callback_data="iqm",
-                    style="primary",
-                )
-            ],
-            [
-                Btn(
-                    "🔙 رجوع",
-                    callback_data="m",
-                    style="primary",
-                )
-            ],
-        ]
-    )
-
-
-def monthly_section_markup():
-    return Markup(
-        [
-            [
-                Btn(
-                    "☀️ صباحي",
-                    callback_data="mqs:current:morning",
-                    style="primary",
-                ),
-                Btn(
-                    "🌙 مسائي",
-                    callback_data="mqs:current:evening",
-                    style="success",
-                ),
-            ],
-            [
-                Btn(
-                    "🔙 رجوع",
-                    callback_data="qm",
-                    style="primary",
-                )
-            ],
-        ]
-    )
-
-
-def monthly_subjects_markup(quiz_type, section):
-    buttons = []
-
-    for s in db.subjects():
-        count = db.count_monthly_question_images(
-            s["id"],
-            quiz_type,
-            section,
-        )
-
-        if count > 0:
-            buttons.append(
-                Btn(
-                    f"{s['name']} ({count})",
-                    callback_data=f"mqi:{quiz_type}:{section}:{s['id']}",
-                    style="primary",
-                )
-            )
-
-    rows = [
-        buttons[i:i + 2]
-        for i in range(0, len(buttons), 2)
-    ]
-
-    rows.append(
-        [
-            Btn(
-                "🔙 رجوع",
-                callback_data="qm",
-                style="primary",
-            )
-        ]
-    )
-
-    return Markup(rows)
-
-
-async def show_monthly_subjects(q, quiz_type, section):
-    if quiz_type == db.MONTHLY_PREVIOUS:
-        title = "📚 أسئلة شهرية سابقة\n\nاختر المادة:"
-    elif section == db.SECTION_MORNING:
-        title = "📝 أسئلة الشهر الحالي — ☀️ صباحي\n\nاختر المادة:"
-    else:
-        title = "📝 أسئلة الشهر الحالي — 🌙 مسائي\n\nاختر المادة:"
-
-    has_subjects = any(
-        db.count_monthly_question_images(
-            s["id"],
-            quiz_type,
-            section,
-        ) > 0
-        for s in db.subjects()
-    )
-
-    if not has_subjects:
-        return await show(
-            q,
-            title + "\n\n⚠️ لا توجد أسئلة مضافة حالياً.",
-            back_markup("qm"),
-        )
-
-    return await show(
-        q,
-        title,
-        monthly_subjects_markup(
-            quiz_type,
-            section,
-        ),
-    )
-
-
-async def show_monthly_images(q, sid, quiz_type, section):
-    subj = db.get_subject(sid)
-
-    if not subj:
-        return await show(
-            q,
-            "⚠️ المادة غير موجودة.",
-            back_markup("qm"),
-        )
-
-    images = db.monthly_question_images(
-        sid,
-        quiz_type,
-        section,
-    )
-
-    if not images:
-        return await show(
-            q,
-            "⚠️ لا توجد أسئلة مضافة لهذا القسم.",
-            back_markup("qm"),
-        )
-
-    for image in images:
-        caption = image["caption"] or "📝 أسئلة شهرية"
-        await q.message.reply_photo(
-            image["file_id"],
-            caption=caption,
-        )
-
-    if quiz_type == db.MONTHLY_PREVIOUS:
-        title = f"📚 الأسئلة الشهرية السابقة — {subj['name']}"
-    elif section == db.SECTION_MORNING:
-        title = f"☀️ أسئلة الشهر الحالي الصباحية — {subj['name']}"
-    else:
-        title = f"🌙 أسئلة الشهر الحالي المسائية — {subj['name']}"
-
-    return await show(
-        q,
-        title,
-        Markup(
-            [
-                [
-                    Btn(
-                        "🔙 رجوع للمواد",
-                        callback_data=f"mqs:{quiz_type}:{section}",
-                        style="primary",
-                    )
-                ],
-                [
-                    Btn(
-                        "📝 قائمة الاختبارات",
-                        callback_data="qm",
-                        style="success",
-                    )
-                ],
-            ]
-        ),
-    )
 
 
 # ============================================================
@@ -398,20 +206,8 @@ async def show_monthly_images(q, sid, quiz_type, section):
 
 def contact_buttons():
     return [
-        [
-            Btn(
-                "✈️ تلقرام",
-                url=f"https://t.me/{OWNER_TG}",
-                style="primary",
-            )
-        ],
-        [
-            Btn(
-                "🟢 واتساب",
-                url=f"https://wa.me/{OWNER_WA}",
-                style="success",
-            )
-        ],
+        [Btn("✈️ تلقرام", url=f"https://t.me/{OWNER_TG}", style="primary")],
+        [Btn("🟢 واتساب", url=f"https://wa.me/{OWNER_WA}", style="success")],
     ]
 
 
@@ -420,14 +216,11 @@ def contact_buttons():
 # ============================================================
 
 async def summaries_list(q, sid):
+
     subj = db.get_subject(sid)
 
     if not subj:
-        return await show(
-            q,
-            "⚠️ المادة غير موجودة.",
-            back_markup("sm"),
-        )
+        return await show(q, "⚠️ المادة غير موجودة.", back_markup("sm"))
 
     items = db.summaries(sid)
 
@@ -450,20 +243,10 @@ async def summaries_list(q, sid):
     ]
 
     rows.append(
-        [
-            Btn(
-                "🔙 رجوع للمواد",
-                callback_data="sm",
-                style="primary",
-            )
-        ]
+        [Btn("🔙 رجوع للمواد", callback_data="sm", style="primary")]
     )
 
-    await show(
-        q,
-        f"📄 ملخصات {subj['name']}:",
-        Markup(rows),
-    )
+    await show(q, f"📄 ملخصات {subj['name']}:", Markup(rows))
 
 
 # ============================================================
@@ -471,6 +254,7 @@ async def summaries_list(q, sid):
 # ============================================================
 
 async def send_summary(q, sum_id):
+
     it = db.get_summary(sum_id)
 
     if not it:
@@ -501,20 +285,8 @@ SUB_TEXT = (
 def sub_markup():
     return Markup(
         [
-            [
-                Btn(
-                    "📢 اشترك بالقناة",
-                    url=CHANNEL_URL,
-                    style="primary",
-                )
-            ],
-            [
-                Btn(
-                    "✅ اشتركت، تحقق",
-                    callback_data="chk",
-                    style="success",
-                )
-            ],
+            [Btn("📢 اشترك بالقناة", url=CHANNEL_URL, style="primary")],
+            [Btn("✅ اشتركت، تحقق", callback_data="chk", style="success")],
         ]
     )
 
@@ -524,6 +296,7 @@ def sub_markup():
 # ============================================================
 
 async def is_subscribed(context, uid, force=False):
+
     if not CHANNEL or is_admin(uid):
         return True
 
@@ -531,18 +304,12 @@ async def is_subscribed(context, uid, force=False):
 
     if (
         not force
-        and context.user_data.get(
-            "sub_until",
-            0
-        ) > now
+        and context.user_data.get("sub_until", 0) > now
     ):
         return True
 
     try:
-        m = await context.bot.get_chat_member(
-            CHANNEL,
-            uid
-        )
+        m = await context.bot.get_chat_member(CHANNEL, uid)
     except Exception:
         logger.exception(
             "ما قدرت أتحقق من الاشتراك. "
@@ -552,18 +319,10 @@ async def is_subscribed(context, uid, force=False):
         return True
 
     ok = (
-        m.status in (
-            "member",
-            "administrator",
-            "creator"
-        )
+        m.status in ("member", "administrator", "creator")
         or (
             m.status == "restricted"
-            and getattr(
-                m,
-                "is_member",
-                False
-            )
+            and getattr(m, "is_member", False)
         )
     )
 
