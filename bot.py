@@ -53,6 +53,10 @@ from ui import (
     show,
     sub_markup,
     subjects_markup,
+    monthly_menu_markup,
+    monthly_section_markup,
+    show_monthly_subjects,
+    show_monthly_images,
 )
 
 from ai import ask_ai
@@ -4869,17 +4873,111 @@ async def callback_router( update: Update, context: ContextTypes.DEFAULT_TYPE, )
         await safe_answer(q)
 
         return await show(
-
             q,
+            "📝 الاختبارات والأسئلة الشهرية:",
+            monthly_menu_markup(),
+        )
 
-            "📝 اختر المادة:",
+    if data == "iqm":
 
+        await safe_answer(q)
+
+        return await show(
+            q,
+            "🎯 اختر المادة للاختبار:",
             subjects_markup(
                 "qs",
                 "q_count",
-                "m",
+                "qm",
             ),
+        )
 
+    if data == "mq:previous":
+
+        await safe_answer(q)
+
+        return await show_monthly_subjects(
+            q,
+            db.MONTHLY_PREVIOUS,
+            db.SECTION_SHARED,
+        )
+
+    if data == "mq:current":
+
+        await safe_answer(q)
+
+        return await show(
+            q,
+            "📝 أسئلة الشهر الحالي:",
+            monthly_section_markup(),
+        )
+
+    if data.startswith("mqs:"):
+
+        await safe_answer(q)
+
+        parts = data.split(":")
+
+        if len(parts) != 3:
+            return
+
+        quiz_type = parts[1]
+        section = parts[2]
+
+        if quiz_type not in (
+            db.MONTHLY_PREVIOUS,
+            db.MONTHLY_CURRENT,
+        ):
+            return
+
+        if section not in (
+            db.SECTION_SHARED,
+            db.SECTION_MORNING,
+            db.SECTION_EVENING,
+        ):
+            return
+
+        return await show_monthly_subjects(
+            q,
+            quiz_type,
+            section,
+        )
+
+    if data.startswith("mqi:"):
+
+        await safe_answer(q)
+
+        parts = data.split(":")
+
+        if len(parts) != 4:
+            return
+
+        quiz_type = parts[1]
+        section = parts[2]
+
+        try:
+            sid = int(parts[3])
+        except ValueError:
+            return
+
+        if quiz_type not in (
+            db.MONTHLY_PREVIOUS,
+            db.MONTHLY_CURRENT,
+        ):
+            return
+
+        if section not in (
+            db.SECTION_SHARED,
+            db.SECTION_MORNING,
+            db.SECTION_EVENING,
+        ):
+            return
+
+        return await show_monthly_images(
+            q,
+            sid,
+            quiz_type,
+            section,
         )
 
     if data.startswith("qs:"):
